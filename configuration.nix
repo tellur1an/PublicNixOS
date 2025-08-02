@@ -169,7 +169,7 @@
   # User configuration
   users.users.tellur1an = {
     isNormalUser = true;
-    description = "Anthony Rinaldi";
+    description = "Your Name";
     extraGroups = [ "networkmanager" "wheel" ];
     shell = pkgs.fish;
   };
