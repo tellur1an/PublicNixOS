@@ -1,4 +1,4 @@
-{ config, pkgs, lib, chaotic, ... }:  # Added 'chaotic' as an argument via specialArgs
+{ config, pkgs, lib, chaotic, ... }:
 
 {
   imports = [ ./hardware-configuration.nix ];
@@ -7,7 +7,7 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
   boot.kernelPackages = pkgs.linuxPackages_cachyos;
-  boot.extraModulePackages = with config.boot.kernelPackages; [ config.boot.kernelPackages.v4l2loopback ];
+  boot.extraModulePackages = with config.boot.kernelPackages; [ v4l2loopback ];
   boot.kernelModules = [ "v4l2loopback" ];
   boot.extraModprobeConfig = ''
     options v4l2loopback devices=1 video_nr=1 card_label="OBS Cam" exclusive_caps=1
@@ -41,8 +41,9 @@
 
   programs.niri = {
     enable = true;
-    package = chaotic.legacyPackages.x86_64-linux.niri_git;  # Updated to use niri_git from chaotic
-    # No extraConfig; handle via environment.etc below
+    package = chaotic.legacyPackages.x86_64-linux.niri_git.overrideAttrs (oldAttrs: {
+      doCheck = false; # Skip tests to avoid "Too many open files" error
+    });
   };
 
   services.desktopManager.gnome.enable = true;
@@ -60,15 +61,12 @@
     ];
   };
 
-  # Set Niri configuration file with window rules
+  # Set Niri configuration file
   environment.etc."niri/config.kdl".text = ''
-    prefer-no-csd false  # Global setting based on Niri documentation to handle CSD; override per rule 
-
+    prefer-no-csd false
     window-rule = [
-      { match = { app-id = "some-app" } set = { prefer-no-csd = false, tiled = true } }  # Example rule to force CSD and tiled state; replace as needed 
+      { match = { app-id = "some-app" } set = { prefer-no-csd = false, tiled = true } }
     ]
-
-    # Add other Niri configurations here as needed
   '';
 
   # OBS Studio with plugins
@@ -106,44 +104,11 @@
     };
   };
 
-  # swww-daemon
-  systemd.user.services.swww-daemon = {
-    description = "swww wallpaper daemon";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    serviceConfig = {
-      ExecStart = "${pkgs.swww}/bin/swww-daemon";
-      Restart = "always";
-    };
-  };
-  systemd.user.services.swww-random = {
-    description = "swww random wallpaper";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    serviceConfig = {
-      ExecStart = "/home/tellur1an/swww-random.sh";
-      Restart = "always";
-    };
-  };
-  environment.etc."swww-random.sh" = {
-    text = ''
-      #!/bin/sh
-      WALLPAPER_DIR="/home/tellur1an/Pictures/Wallpapers"
-      INTERVAL=300
-      while true; do
-        WALLPAPER=$(find "$WALLPAPER_DIR" -type f \( -name "*.jpg" -o -name "*.png" \) | shuf -n 1)
-        ${pkgs.swww}/bin/swww img "$WALLPAPER"
-        sleep $INTERVAL
-      done
-    '';
-    mode = "0755";
-  };
-
   # Hardware and gaming
   hardware.wooting.enable = true;
   hardware.steam-hardware.enable = true;
   hardware.xone.enable = true;
-  hardware.xpadneo.enable = true;
+  #hardware.xpadneo.enable = true;
   hardware.opentabletdriver.enable = true;
   programs.gamemode.enable = true;
   programs.steam.enable = true;
@@ -169,64 +134,26 @@
   # User configuration
   users.users.tellur1an = {
     isNormalUser = true;
-    description = "Your Name";
+    description = "Anthony Rinaldi";
     extraGroups = [ "networkmanager" "wheel" ];
     shell = pkgs.fish;
   };
 
-  # Home-manager configuration
-  home-manager.useGlobalPkgs = true;
-  home-manager.useUserPackages = true;
-  home-manager.users.tellur1an = {
-    dconf.settings = {
-      "org/gnome/shell" = {
-        disable-user-extensions = false;
-        enabled-extensions = with pkgs.gnomeExtensions; [
-          blur-my-shell.extensionUuid
-          dash-to-panel.extensionUuid
-          compiz-windows-effect.extensionUuid
-          coverflow-alt-tab.extensionUuid
-          tray-icons-reloaded.extensionUuid
-          just-perfection.extensionUuid
-          arcmenu.extensionUuid
-          appindicator.extensionUuid
-          clipboard-indicator.extensionUuid
-          custom-osd.extensionUuid
-          pop-shell.extensionUuid
-          tiling-shell.extensionUuid
-          paperwm.extensionUuid
-        ];
-      };
-    };
-    home.stateVersion = "25.05";
-  };
-
-  # Polkit authentication agent
-  systemd.user.services.polkit-gnome-authentication-agent-1 = {
-    description = "polkit-gnome-authentication-agent-1";
-    wantedBy = [ "graphical-session.target" ];
-    wants = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
-    serviceConfig = {
-      Type = "simple";
-      ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
-      Restart = "on-failure";
-      RestartSec = 1;
-      TimeoutStopSec = 10;
-    };
-  };
-
-  # Allow unfree packages
-  nixpkgs.config.allowUnfree = true;
-
   # System packages
   environment.systemPackages = with pkgs; [
+    # QtWebEngine and dependencies
+    #qt5.qtwebengine
+    libxkbcommon
+    nss
+    fontconfig
+    libdrm
+    mesa
+
     # Core Utilities
     vim
     wget
     git
     taskwarrior3
-    home-manager
 
     # Shells
     fish
@@ -236,19 +163,18 @@
     alacritty
     foot
 
-    # Web Browsers
-    vivaldi
-    vivaldi-ffmpeg-codecs
-    mullvad-browser
-
     # Communication
     signal-desktop
-    teamspeak_client
+    # teamspeak_client 
     element-desktop
     simplex-chat-desktop
     electron-mail
     legcord
-
+    rustdesk
+	
+	#AI
+	lmstudio
+	
     # Productivity
     featherpad
     standardnotes
@@ -256,10 +182,16 @@
     obsidian
     libreoffice
     zathura
+    neovim
 
+    # Web Browsers
+    vivaldi
+    vivaldi-ffmpeg-codecs
+    mullvad-browser
+    librewolf-bin
+    
     # VPN and Security
     mullvad-vpn
-    protonvpn-gui
     hblock
 
     # Gaming
@@ -269,6 +201,7 @@
     mangohud
     goverlay
     joystickwake
+    input-remapper
 
     # Media and Audio
     youtube-music
@@ -286,7 +219,14 @@
     nerd-fonts.fira-code
     nerd-fonts.droid-sans-mono
     material-symbols
-
+    dejavu_fonts
+    texlivePackages.dejavu
+    nerd-fonts.dejavu-sans-mono
+    lilex
+    fira-code-symbols
+    nerd-fonts.symbols-only
+    nerd-fonts.space-mono
+    
     # Themes and Icons
     papirus-icon-theme
     yaru-theme
@@ -300,7 +240,7 @@
     hypridle
     quickshell
     walker
-    rofi-wayland
+    rofi
     wofi
     hyprcursor
     hyprpolkitagent
@@ -311,10 +251,10 @@
     xdg-desktop-portal-wlr
     kdePackages.qt6ct
     swaylock-effects
-    # niri # Commented out
     swayidle
     swww
     xwayland-satellite
+    
 
     # Notifications
     libnotify
@@ -326,11 +266,13 @@
     nemo-with-extensions
 
     # System Utilities
+    gearlever
     neofetch
     gnome-tweaks
     gnome-boxes
     openrgb-with-all-plugins
     xdg-user-dirs
+    
 
     # Authentication and Security
     gnome-keyring
@@ -361,26 +303,23 @@
     gnomeExtensions.paperwm
 
     # Graphics and Display
-    mesa
     nwg-look
-
-    # Streaming and Media
-    grayjay
-    mangojuice
   ];
 
   # Mesa configuration
-  hardware.graphics.enable = true;
-  hardware.graphics.enable32Bit = lib.mkIf (pkgs.stdenv.hostPlatform.isLinux && pkgs.stdenv.hostPlatform.isx86) true;
+  hardware.graphics = {
+    enable = true;
+    enable32Bit = lib.mkIf (pkgs.stdenv.hostPlatform.isLinux && pkgs.stdenv.hostPlatform.isx86) true;
+    package = pkgs.mesa;
+  };
 
   # Firewall
   networking.firewall.enable = false;
 
-  # System state version
-  system.stateVersion = "25.05";
-
   # Environment variables
   environment.sessionVariables = {
+    QT_QPA_PLATFORM = "xcb"; # Use XWayland for Qt apps
+    QTWEBENGINE_DISABLE_GPU = "1"; # Disable GPU to avoid QtWebEngine crashes
     MOZ_ENABLE_WAYLAND = "1";
     XDG_SESSION_TYPE = "wayland";
     QT_AUTO_SCREEN_SCALE_FACTOR = "1";
@@ -394,4 +333,10 @@
     QT_QPA_PLATFORMTHEME = "qt6ct";
     STEAM_FORCE_DESKTOPUI_SCALING = "1";
   };
+
+  # Allow unfree packages
+  nixpkgs.config.allowUnfree = true;
+
+  # System state version
+  system.stateVersion = "25.05";
 }
