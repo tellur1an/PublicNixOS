@@ -1,0 +1,57 @@
+#!/usr/bin/env sh
+# Shared session autostart for Hyprland and MangoWC.
+# Compositor-specific setup (portals, polkit agent, shell, monitors) stays in
+# each compositor's own config; everything app-level lives here so the two
+# sessions can't drift apart.
+#
+# Callers must export WAYLAND_DISPLAY to systemd/dbus BEFORE running this.
+
+run_once() {
+    # $1 = pgrep -f pattern, rest = command
+    pattern="$1"; shift
+    pgrep -f "$pattern" >/dev/null || "$@" &
+}
+
+# Cursor theme for GTK apps
+dconf write /org/gnome/desktop/interface/cursor-theme "'Bibata-Modern-Ice'"
+dconf write /org/gnome/desktop/interface/cursor-size 28
+
+# Clipboard
+run_once 'wl-clip-persist' wl-clip-persist --clipboard regular
+run_once 'wl-paste --type text'  wl-paste --type text  --watch cliphist store
+run_once 'wl-paste --type image' wl-paste --type image --watch cliphist store
+
+# PGTK emacs daemon dies on Wayland disconnect (GTK3 limit); restart fresh
+systemctl --user reset-failed emacs.service 2>/dev/null
+systemctl --user restart emacs.service &
+
+# Scratchpad terminal (both WMs use class scratchterm)
+run_once 'kitty --class scratchterm' kitty --class scratchterm
+
+# Communication (vesktop.service has the wayland-wait + ozone fix; never
+# spawn vesktop directly or it can SIGSEGV into X11 fallback at boot)
+systemctl --user start vesktop.service &
+run_once signal-desktop signal-desktop
+
+# Mail
+# gtk-launch is not installed on this system, so call the binaries directly
+# (matching the Exec lines of their .desktop entries: the proton-bridge-gui
+# wrapper, and tuta with --no-sandbox to avoid the Electron sandbox crash).
+run_once 'proton-bridge|bridge-gui|bridge --grpc' protonmail-bridge-gui
+run_once tutanota-desktop tutanota-desktop --no-sandbox
+
+# System tray / utilities
+run_once blueman-applet blueman-applet
+run_once kdeconnectd kdeconnectd
+run_once kdeconnect-indicator kdeconnect-indicator
+run_once openrgb openrgb
+run_once keepassxc keepassxc
+run_once joplin-desktop joplin-desktop
+run_once 'syncthing serve' syncthing serve --no-browser --no-restart
+run_once start-streamcontroller "$HOME/.local/bin/start-streamcontroller"
+input-remapper-control --command autoload &
+
+# Gaming: delay steam so xdg-doc-portal is fully up before steam mounts its
+# FUSE paths (wedged steam-silent FUSE unmount has caused RCU stalls / mpv
+# stutter on this machine)
+( sleep 15; pgrep -x steam >/dev/null || steam -silent ) &

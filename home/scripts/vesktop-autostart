@@ -1,0 +1,75 @@
+#!/bin/sh
+set -eu
+
+log_dir="${XDG_CACHE_HOME:-$HOME/.cache}"
+log_file="$log_dir/vesktop-autostart.log"
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/vesktop"
+real_vesktop="${VESKTOP_BIN:-}"
+
+mkdir -p "$log_dir"
+
+log() {
+    printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$log_file"
+}
+
+if [ -z "$real_vesktop" ]; then
+    real_vesktop="$(command -v vesktop || true)"
+fi
+
+if [ -z "$real_vesktop" ] && [ -x /run/current-system/sw/bin/vesktop ]; then
+    real_vesktop="/run/current-system/sw/bin/vesktop"
+fi
+
+# Compositor autostart can race dbus/Wayland/portal setup.
+sleep "${VESKTOP_AUTOSTART_DELAY:-8}"
+
+# Service env may lack WAYLAND_DISPLAY (started before compositor import-environment).
+# Without it electron falls back to X11, finds no $DISPLAY, and SIGSEGVs in libuv.
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+for _ in $(seq 1 50); do
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "$runtime_dir/$WAYLAND_DISPLAY" ]; then
+        break
+    fi
+    for w in "$runtime_dir"/wayland-[0-9]*; do
+        case "$w" in *.lock) continue ;; esac
+        if [ -S "$w" ]; then
+            WAYLAND_DISPLAY="${w##*/}"
+            export WAYLAND_DISPLAY
+            break
+        fi
+    done
+    [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "$runtime_dir/$WAYLAND_DISPLAY" ] && break
+    sleep 0.2
+done
+
+# Force Wayland backend so it never tries X11.
+export ELECTRON_OZONE_PLATFORM_HINT=wayland
+
+for _ in 1 2 3 4 5; do
+    if ! pgrep -u "$(id -u)" -x vesktop >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+if pgrep -u "$(id -u)" -x vesktop >/dev/null 2>&1; then
+    log "already running"
+    exit 0
+fi
+
+if [ -z "$real_vesktop" ] || [ ! -x "$real_vesktop" ]; then
+    log "missing executable: ${real_vesktop:-vesktop}"
+    exit 127
+fi
+
+if [ -L "$config_dir/SingletonLock" ]; then
+    lock_target="$(readlink "$config_dir/SingletonLock" || true)"
+    lock_pid="${lock_target##*-}"
+    if [ -n "$lock_pid" ] && [ "$lock_pid" != "$lock_target" ] && ! kill -0 "$lock_pid" >/dev/null 2>&1; then
+        rm -f "$config_dir/SingletonLock" "$config_dir/SingletonSocket" "$config_dir/SingletonCookie"
+        log "removed stale singleton for pid $lock_pid"
+    fi
+fi
+
+log "starting $real_vesktop"
+exec "$real_vesktop" "$@" >>"$log_file" 2>&1

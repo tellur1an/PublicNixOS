@@ -5,6 +5,13 @@
 # ── Performance: skip for non-interactive ────────────────────────────────────
 [[ $- != *i* ]] && return
 
+# ── Wayland session vars (inherit from systemd if WM keybind launched early) ─
+if [[ -z "$WAYLAND_DISPLAY" ]]; then
+  _wl=$(systemctl --user show-environment 2>/dev/null | grep '^WAYLAND_DISPLAY=' | cut -d= -f2)
+  [[ -n "$_wl" ]] && export WAYLAND_DISPLAY=$_wl
+  unset _wl
+fi
+
 # ── Zinit bootstrap ──────────────────────────────────────────────────────────
 ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 if [[ ! -d "$ZINIT_HOME" ]]; then
@@ -51,8 +58,6 @@ zinit light MichaelAquilina/zsh-you-should-use
 # updates terminal tab/window title on cd and command run
 zinit light jreese/zsh-titles
 
-# desktop notification when long command finishes
-zinit light marzocchi/zsh-notify
 
 # jump back to named parent dir: inside ~/a/b/c/d, `bd b` → ~/a/b
 zinit light Tarrasch/zsh-bd
@@ -259,14 +264,6 @@ ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#585b70'
 ZSH_AUTOSUGGEST_MANUAL_REBIND=1   # faster with large histories
 
-# ── zsh-notify settings ──────────────────────────────────────────────────────
-zstyle ':notify:*' command-complete-timeout 10   # fire after 10s
-zstyle ':notify:*' notifier notify-send
-zstyle ':notify:*' success-title 'Done: #{cmd}'
-zstyle ':notify:*' error-title 'Failed: #{cmd}'
-zstyle ':notify:*' success-sound ''
-zstyle ':notify:*' error-sound ''
-zstyle ':notify:*' check-focus no                 # disable xdotool focus check (Wayland)
 
 # ── you-should-use settings ───────────────────────────────────────────────────
 export YSU_MESSAGE_POSITION="after"
@@ -396,6 +393,17 @@ alias grh='git reset HEAD'
 alias grhh='git reset HEAD --hard'
 alias gclean='git clean -fd'
 alias lg='lazygit'          # if installed
+# nixpush [commit message]  — stage + commit any changes, then push to origin + github-private
+nixpush() {
+  local msg="${*:-config update $(date +%Y-%m-%dT%H:%M)}"
+  git -C ~/myflake add -A
+  if ! git -C ~/myflake diff --cached --quiet; then
+    git -C ~/myflake commit -m "$msg" || return 1
+  fi
+  git -C ~/myflake push origin && git -C ~/myflake push github-private
+}
+alias nixswitch='sudo nixos-rebuild switch --flake ~/myflake\#nixos'
+alias nixupdate='nix flake update --flake ~/myflake && sudo nixos-rebuild switch --flake ~/myflake\#nixos'
 
 # ── Aliases — systemd ────────────────────────────────────────────────────────
 alias sstart='sudo systemctl start'

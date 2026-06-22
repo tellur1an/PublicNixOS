@@ -1,9 +1,155 @@
-{ config, pkgs, lib, inputs, hyprland, hyprland-contrib, hyprland-plugins, mango-flake, ... }:
+{ config, pkgs, pkgs-stable, lib, inputs, hyprland, hyprland-contrib, hyprland-plugins, mango-flake, ... }:
 
+let
+  # Weekly notifier for upstream updates to the pinned gaming inputs
+  # (falcond / falcond-profiles / scx-loader). Sends via msmtp (Proton Bridge).
+  flakePinCheck = pkgs.writeShellApplication {
+    name = "flake-pin-check";
+    runtimeInputs = with pkgs; [ curl jq msmtp gnupg gawk gnugrep coreutils gnused ];
+    text = builtins.readFile ./scripts/flake-pin-check.sh;
+  };
+
+  keepassxcBrowserManifest = pkgs.writeText "org.keepassxc.keepassxc_browser.json" ''
+    {
+        "allowed_origins": [
+            "chrome-extension://pdffhmdngciaglkoonimfcmckehcpafo/",
+            "chrome-extension://oboonakemofpalcgghocfoadofidjkkk/"
+        ],
+        "description": "KeePassXC integration with native messaging support",
+        "name": "org.keepassxc.keepassxc_browser",
+        "path": "/run/current-system/sw/bin/keepassxc-proxy",
+        "type": "stdio"
+    }
+  '';
+
+  protonmailBridgeGui = pkgs.writeShellScriptBin "protonmail-bridge-gui" ''
+    set -euo pipefail
+
+    bridge="$HOME/.local/share/protonmail/bridge-v3/updates/3.25.0/proton-bridge"
+    if [ ! -x "$bridge" ]; then
+      bridge="${pkgs.protonmail-bridge}/bin/protonmail-bridge"
+    fi
+
+    export LD_LIBRARY_PATH="${lib.makeLibraryPath [
+      pkgs.libsecret
+      (lib.getLib pkgs.glib)
+      pkgs.libfido2
+      (lib.getLib pkgs.openssl)
+      pkgs.stdenv.cc.cc.lib
+    ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+    if ${pkgs.procps}/bin/pgrep -u "$(${pkgs.coreutils}/bin/id -u)" -f "$bridge" >/dev/null; then
+      exit 0
+    fi
+
+    exec ${pkgs.systemd}/bin/systemd-run \
+      --user \
+      --collect \
+      --quiet \
+      --setenv=LD_LIBRARY_PATH="$LD_LIBRARY_PATH" \
+      ${pkgs.steam-run}/bin/steam-run "$bridge" "$@"
+  '';
+in
 {
   home.username = "username";
   home.homeDirectory = "/home/username";
   home.stateVersion = "25.11";
+
+  # Remove stale HM backup files before each activation so rebuilds don't
+  # block on "would be clobbered" errors when the same file is re-backed-up.
+  home.activation.removeStaleBackups = lib.hm.dag.entryBefore ["writeBoundary"] ''
+    rm -f "${config.home.homeDirectory}/.config/gtk-4.0/gtk.css.backup"
+    rm -f "${config.home.homeDirectory}/.config/gtk-3.0/gtk.css.backup"
+  '';
+
+  # Deploy starship.toml as a writable regular file (not a store symlink) so
+  # noctalia can inject/update the [palettes.noctalia] block on theme changes.
+  home.activation.noctalia-starship = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    export PATH="/run/current-system/sw/bin:$PATH"
+    starship_cfg="${config.home.homeDirectory}/.config/starship.toml"
+    palette_cache="${config.home.homeDirectory}/.cache/noctalia/starship-palette.toml"
+
+    cp --no-preserve=mode "${./shell/starship.toml}" "$starship_cfg"
+
+    # noctalia v5 dropped the starship apply.sh template from its package, so
+    # guard on the script actually existing — otherwise HM activation aborts
+    # (status 127). The static [palettes.noctalia] block in starship.toml stays.
+    apply_sh=/run/current-system/sw/share/noctalia/assets/templates/starship/apply.sh
+    if [ -f "$palette_cache" ] && [ -f "$apply_sh" ]; then
+      bash "$apply_sh"
+    fi
+  '';
+
+  home.activation.noctalia-notification-daemon = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    export PATH="/run/current-system/sw/bin:$PATH"
+    settings="${config.home.homeDirectory}/.local/state/noctalia/settings.toml"
+
+    if [ -f "$settings" ]; then
+      if grep -q '^[[:space:]]*enable_daemon[[:space:]]*=' "$settings"; then
+        $DRY_RUN_CMD sed -i 's/^[[:space:]]*enable_daemon[[:space:]]*=.*/enable_daemon = true/' "$settings"
+      elif grep -q '^\[notification\]' "$settings"; then
+        $DRY_RUN_CMD sed -i '/^\[notification\]/a enable_daemon = true' "$settings"
+      else
+        $DRY_RUN_CMD sh -c 'printf "\n[notification]\nenable_daemon = true\n" >> "$1"' sh "$settings"
+      fi
+    fi
+  '';
+
+  home.activation.keepassxc-brave-origin-native-messaging = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    target="${config.home.homeDirectory}/.config/BraveSoftware/Brave-Origin/NativeMessagingHosts/org.keepassxc.keepassxc_browser.json"
+    $DRY_RUN_CMD mkdir -p "$(dirname "$target")"
+    $DRY_RUN_CMD install -m 0644 "${keepassxcBrowserManifest}" "$target"
+  '';
+
+  # Copy Papirus icons to a user-writable location and recolor folders grey.
+  # NixOS's Papirus is in the read-only store so papirus-folders can't write
+  # there. The marker file tracks the store path so we only re-copy on updates.
+  home.activation.papirus-grey = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    export PATH="/run/current-system/sw/bin:$PATH"
+    icon_src="${pkgs-stable.papirus-icon-theme}/share/icons"
+    icon_dst="$HOME/.local/share/icons"
+    marker="$icon_dst/.papirus-nix-source"
+
+    if [ ! -f "$marker" ] || [ "$(cat "$marker" 2>/dev/null)" != "$icon_src" ]; then
+      $VERBOSE_ECHO "Papirus: copying icons and applying grey folders"
+      $DRY_RUN_CMD mkdir -p "$icon_dst"
+      $DRY_RUN_CMD chmod -R u+w "$icon_dst/Papirus" "$icon_dst/Papirus-Dark" "$icon_dst/Papirus-Light" 2>/dev/null || true
+      $DRY_RUN_CMD rm -rf "$icon_dst/Papirus" "$icon_dst/Papirus-Dark" "$icon_dst/Papirus-Light"
+      $DRY_RUN_CMD cp -r --no-preserve=mode "$icon_src/Papirus" "$icon_src/Papirus-Dark" "$icon_src/Papirus-Light" "$icon_dst/"
+      $DRY_RUN_CMD "$HOME/.local/bin/papirus-folders" -C grey
+      printf '%s' "$icon_src" > "$marker"
+    fi
+  '';
+
+  # Copy adw-gtk3 themes as real files (not nix-store symlinks) so flatpak's
+  # sandbox can read them. Flatpaks get xdg-data/themes:ro but can't follow
+  # symlinks into /nix/store. Uses a marker to skip if already done.
+  home.activation.adw-gtk3-flatpak = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    export PATH="/run/current-system/sw/bin:$PATH"
+    theme_src="${pkgs-stable.adw-gtk3}/share/themes"
+    theme_dst="$HOME/.local/share/themes"
+    marker="$theme_dst/.adw-gtk3-nix-source"
+
+    if [ ! -f "$marker" ] || [ "$(cat "$marker" 2>/dev/null)" != "$theme_src" ]; then
+      $VERBOSE_ECHO "adw-gtk3: copying themes for flatpak access"
+      $DRY_RUN_CMD mkdir -p "$theme_dst"
+      $DRY_RUN_CMD rm -rf "$theme_dst/adw-gtk3" "$theme_dst/adw-gtk3-dark"
+      $DRY_RUN_CMD cp -rL --no-preserve=mode "$theme_src/adw-gtk3" "$theme_src/adw-gtk3-dark" "$theme_dst/"
+      printf '%s' "$theme_src" > "$marker"
+    fi
+  '';
+
+  home.activation.flatpak-dark-theme = lib.hm.dag.entryAfter ["adw-gtk3-flatpak"] ''
+    export PATH="/run/current-system/sw/bin:$PATH"
+    if command -v flatpak >/dev/null 2>&1; then
+      $VERBOSE_ECHO "Flatpak: allowing dark GTK theme access"
+      $DRY_RUN_CMD flatpak override --user \
+        --filesystem=xdg-data/themes:ro \
+        --filesystem="$HOME/.themes:ro" \
+        --filesystem="$HOME/.local/share/themes:ro" \
+        --env=GTK_THEME=adw-gtk3-dark
+    fi
+  '';
 
   # ============================================================
   # Personal scripts (vpn-pick + family, yt-x / yt-xr, rumble-x) are kept
@@ -20,19 +166,177 @@
   # ============================================================
   home.sessionPath = [ "$HOME/.local/bin" ];
 
+  home.packages = [
+    protonmailBridgeGui
+    ((pkgs.emacsPackagesFor pkgs.emacs).emacsWithPackages (epkgs: [ epkgs.mu4e ]))
+    pkgs.mu
+    pkgs.isync
+    pkgs.msmtp
+    pkgs.openssl
+  ];
+
   # ============================================================
   # Hyprland (PRIMARY WM) native lua config, copied from the Fedora box.
   # recursive=true symlinks each file individually, so any non-managed
   # files you later drop into ~/.config/hypr still work alongside these.
   # System-path fixes already applied in tree:
   #   /usr/bin/wiremix             -> wiremix (PATH)
-  # NOTE: binds.lua still hardcodes ~/.local/bin/rofimoji; rofimoji is also
-  # installed via nixpkgs (in PATH) -- symlink or edit if that path is empty.
+  #   rofimoji                     -> rofimoji (PATH); binds.lua calls it bare,
+  #                                   resolves to the nixpkgs build.
   # ============================================================
   xdg.configFile."hypr" = {
     source = ./hypr;
     recursive = true;
   };
+
+  xdg.dataFile."applications/protonmail-bridge.desktop".text = ''
+    [Desktop Entry]
+    Type=Application
+    Version=1.5
+    Name=Proton Mail Bridge
+    GenericName=Mail Bridge
+    Comment=Use Proton Mail with local IMAP and SMTP mail clients
+    Exec=${protonmailBridgeGui}/bin/protonmail-bridge-gui
+    Icon=internet-mail
+    Terminal=false
+    StartupNotify=true
+    Categories=Network;Email;
+  '';
+
+  # Tuta Mail desktop client (Electron AppImage) rewrites its own
+  # ~/.local/share/applications/tutanota-desktop.desktop on every launch,
+  # pinning a GC-volatile /nix/store path AND dropping `--no-sandbox` -- so the
+  # next launch hits the Electron sandbox and crashes ("did not auto launch").
+  # That self-written file shadows the correct nixpkgs entry (higher XDG
+  # precedence). Pin a read-only HM symlink here so the app's rewrite fails and
+  # the correct command always wins. StartupWMClass stays `tutanota-desktop` to
+  # match the Hyprland windowrule (rules.lua) and the windowrule tag below.
+  xdg.dataFile."applications/tutanota-desktop.desktop" = {
+    force = true;
+    text = ''
+    [Desktop Entry]
+    Type=Application
+    Name=Tuta Mail
+    GenericName=Mail Client
+    Comment=The desktop client for Tuta Mail, the secure e-mail service.
+    Exec=tutanota-desktop --no-sandbox %U
+    Icon=tutanota-desktop
+    Terminal=false
+    StartupWMClass=tutanota-desktop
+    MimeType=x-scheme-handler/mailto;
+    Categories=Network;Email;
+  '';
+  };
+
+  # Launcher entries for the TUI apps, each opened in kitty. iamb ships no
+  # .desktop; aerc ships one but with Terminal=true (uses the XDG default
+  # terminal, not kitty) — override it here. `--class` sets the Wayland app-id
+  # (== StartupWMClass) so launchers group them and WM rules can target them.
+  xdg.dataFile."applications/iamb.desktop".text = ''
+    [Desktop Entry]
+    Type=Application
+    Name=iamb
+    GenericName=Matrix Client
+    Comment=Matrix chat client (terminal UI, Vim keys)
+    Exec=kitty --class iamb --title "iamb (Matrix)" iamb
+    Icon=iamb
+    Terminal=false
+    StartupWMClass=iamb
+    Categories=Network;InstantMessaging;Chat;
+    Keywords=Matrix;Chat;IM;
+  '';
+
+  xdg.dataFile."applications/aerc.desktop" = {
+    force = true;
+    text = ''
+    [Desktop Entry]
+    Type=Application
+    Name=aerc
+    GenericName=Mail Client
+    Comment=Email client (terminal UI)
+    Exec=kitty --class aerc --title "aerc (Mail)" aerc %u
+    Icon=aerc
+    Terminal=false
+    StartupWMClass=aerc
+    Categories=Office;Network;Email;
+    Keywords=Email;Mail;IMAP;SMTP;
+    MimeType=x-scheme-handler/mailto;
+  '';
+  };
+
+  home.file.".mbsyncrc".text = ''
+    IMAPAccount proton
+    Host 127.0.0.1
+    Port 1143
+    User your-email@example.com
+    PassCmd "gpg --quiet --for-your-eyes-only --no-tty -d ~/.authinfo.gpg 2>/dev/null | awk '/machine 127.0.0.1 login your-email@example.com port 1143/{print $NF}'"
+    TLSType None
+
+    IMAPStore proton-remote
+    Account proton
+
+    MaildirStore proton-local
+    SubFolders Verbatim
+    Path ~/Mail/proton/
+    Inbox ~/Mail/proton/Inbox/
+
+    Channel proton
+    Far :proton-remote:
+    Near :proton-local:
+    Patterns * !"All Mail" !"Recovered Messages"
+    Create Both
+    Sync All
+    Expunge None
+    SyncState *
+
+    Channel proton-recovered
+    Far :proton-remote:
+    Near :proton-local:
+    Patterns "Recovered Messages"
+    Create Near
+    Sync Pull
+    Expunge None
+    SyncState *
+
+    Channel proton-allmail
+    Far :proton-remote:
+    Near :proton-local:
+    Patterns "All Mail"
+    Create Near
+    Sync Pull PushGone PushFlags
+    Expunge None
+    SyncState *
+
+    Group proton-all
+    Channel proton
+    Channel proton-recovered
+    Channel proton-allmail
+  '';
+
+  # Proton Bridge SMTP uses STARTTLS with a self-signed cert (CN=127.0.0.1), so
+  # `tls off` makes msmtp refuse PLAIN auth ("cannot use a secure authentication
+  # method") and nothing sends. Use STARTTLS and pin the bridge's SHA256
+  # fingerprint. NOTE: if the bridge regenerates its cert (reinstall/major
+  # update) this fingerprint changes and sending breaks until refreshed — get a
+  # new one with:
+  #   msmtp --serverinfo --host=127.0.0.1 --port=1025 --tls --tls-starttls --tls-certcheck=off
+  home.file.".msmtprc".text = ''
+    defaults
+    auth on
+    tls on
+    tls_starttls on
+    tls_fingerprint D3:3E:40:95:8B:6D:47:0E:04:AF:A4:FF:13:A1:82:40:5A:82:90:D4:82:48:85:30:89:9D:D7:48:BC:2A:DC:12
+    logfile ~/.cache/msmtp.log
+
+    account proton
+    host 127.0.0.1
+    port 1025
+    from your-email@example.com
+    user your-email@example.com
+    passwordeval gpg --quiet --for-your-eyes-only --no-tty -d ~/.authinfo.gpg 2>/dev/null | awk '/machine 127.0.0.1 login your-email@example.com port 1143/{print $NF}'
+
+    account default : proton
+  '';
 
   # ============================================================
   # MangoWC Configuration
@@ -140,6 +444,9 @@
   
   home.file.".config/mango/env.conf".text = ''
     # Env setting format is: env=NAME,VALUE (no spaces).
+    # Stale GTK_THEME from previous tools/sessions overrides gsettings — force
+    # the correct value so spawned apps always use adw-gtk3-dark + noctalia.css.
+    env=GTK_THEME,adw-gtk3-dark
     env=MOZ_ENABLE_WAYLAND,1
     env=MOZ_DBUS_REMOTE,1
     env=XDG_SESSION_TYPE,wayland
@@ -353,8 +660,9 @@
     bind=SUPER+CTRL,9,toggleview,9
 
     # ===== NOTIFICATIONS & UTILITIES =====
-    bind=SUPER,c,spawn,swaync-client -t
-    bind=SUPER+SHIFT,c,spawn,swaync-client -C
+    bind=SUPER,c,spawn,noctalia msg panel-toggle control-center
+    bind=SUPER+SHIFT,n,spawn,noctalia msg panel-toggle control-center notifications
+    bind=SUPER+SHIFT,c,spawn,noctalia msg notification-clear-active
     bind=SUPER,p,spawn_shell,cliphist list | rofi -dmenu -i | cliphist decode | wl-copy
     bind=SUPER,semicolon,spawn,rofimoji --action copy --selector wofi --prompt Emoji
     bind=SUPER,v,spawn,pwvucontrol
@@ -448,7 +756,7 @@
     # Chat (tag2)
     windowrule=tags:2,appid:^(legcord)$
     windowrule=tags:2,appid:^(signal)$
-    windowrule=tags:2,appid:^(discord)$
+    windowrule=tags:2,appid:^(dev\.vencord\.Vesktop)$
     windowrule=tags:2,appid:^(chat-simplex-desktop-MainKt)$
 
     # SimpleX – force floating and cap height
@@ -512,67 +820,36 @@
   '';
 
   home.file.".config/mango/autostart.conf".text = ''
-    # ===== SYSTEM ENVIRONMENT =====
-    exec-once=dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=wlroots DISPLAY PATH
-    exec-once=systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP DISPLAY PATH
+    # ============================================================
+    # MangoWC autostart - compositor-specific only.
+    # App-level autostart shared with Hyprland via wm-session-autostart
+    # (single source, no drift between sessions).
+    # ============================================================
 
     # Portal backend for Electron apps (Signal, Discord, etc.)
     exec-once=systemctl --user start xdg-desktop-portal-wlr && systemctl --user restart xdg-desktop-portal
 
+    # Export compositor env to systemd/dbus BEFORE anything that needs WAYLAND_DISPLAY
+    exec-once=dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP DISPLAY PATH XCURSOR_THEME XCURSOR_SIZE HYPRCURSOR_THEME HYPRCURSOR_SIZE
+    exec-once=systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP DISPLAY PATH XCURSOR_THEME XCURSOR_SIZE HYPRCURSOR_THEME HYPRCURSOR_SIZE
+
+    exec-once=noctalia
+
     # ===== DISPLAY CONFIGURATION =====
+    # Direct wlr-randr call (240Hz)
     exec-once=wlr-randr --output DP-2 --mode 3440x1440@239.983994
 
-    # ===== VISUAL =====
-    exec-once=swaybg -i "$HOME/Pictures/Wallpapers/Ultrawide/boat.jpg" -m fill
-    exec-once=waybar
-    exec-once=unclutter --timeout 3 --hide-on-touch
-
-    # ===== SYSTEM SERVICES =====
-    exec-once=gnome-keyring-daemon --start --components=secrets,ssh,pkcs11
-    exec-once=/usr/lib/kwalletd6
-    exec-once=emacs --daemon
-
-    # Notifications & system tray
-    exec-once=swaync
-    exec-once=blueman-applet
-
-    # ===== CLIPBOARD =====
-    exec-once=wl-clip-persist --clipboard regular
-    exec-once=wl-paste --type text --watch cliphist store
+    # ===== AUTH AGENT =====
+    # launched here (after env export) so WAYLAND_DISPLAY is available
+    exec-once=/usr/libexec/xfce-polkit
 
     # ===== IDLE & LOCK =====
-    exec-once=swayidle -w timeout 300 '~/.local/bin/idle-lock-guard' timeout 1800 'systemctl suspend' before-sleep 'swaylock -f --color 000000'
+    # Handled entirely by Noctalia's built-in idle manager (Settings > Idle)
 
-    # ===== SCRATCHPAD TERMINAL =====
-    exec-once=foot --app-id=scratchterm
-
-    # ===== APPLICATIONS =====
-    # Communication
-    exec-once=discord
-    exec-once=signal-desktop
-    exec-once=sh -lc 'env DESKTOPINTEGRATION=1 _JAVA_AWT_WM_NONREPARENTING=1 /home/username/AppImages/simplex_chat.appimage'
-    exec-once=fractal
-    exec-once=dino
-
-    # Mail
-    exec-once=protonmail-bridge
-    exec-once=gtk-launch tutanota-desktop
-    exec-once=thunderbird
-
-    # Utilities
-    exec-once=kdeconnectd
-    exec-once=kdeconnect-indicator
-    exec-once=openrgb
-
-    # Gaming
-    exec-once=steam -silent
-
-    # Custom tools
-    exec-once=~/.local/bin/streamcontroller-autostart
-
-    # ===== SYSTEM TWEAKS =====
-    exec-once=dconf write /org/gnome/desktop/interface/cursor-size 24
-    exec-once=pikman-update-manager-autostart
+    # ===== SHARED APP AUTOSTART =====
+    # clipboard, scratchterm, vesktop.service (wayland-wait fix), signal, mail,
+    # tray utils, syncthing, keepassxc, streamcontroller, input-remapper, delayed steam
+    exec-once=~/.local/bin/wm-session-autostart
   '';
 
   # ============================================================
@@ -671,6 +948,59 @@
     executable = true;
   };
 
+  home.file.".local/bin/wm-session-autostart" = {
+    source = ./scripts/wm-session-autostart;
+    executable = true;
+  };
+
+  home.file.".local/bin/start-streamcontroller" = {
+    source = ./scripts/start-streamcontroller;
+    executable = true;
+  };
+
+  home.file.".local/bin/vesktop-autostart" = {
+    source = ./scripts/vesktop-autostart;
+    executable = true;
+  };
+
+  systemd.user.services.vesktop = {
+    Unit = {
+      Description = "Vesktop";
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${config.home.homeDirectory}/.local/bin/vesktop-autostart";
+      Restart = "on-failure";
+      RestartSec = 3;
+    };
+    Install.WantedBy = [ "default.target" ];
+  };
+
+  # Weekly check for upstream updates to the pinned gaming inputs. Runs as a
+  # user service (needs ~/.msmtprc + gpg-agent + the loopback Proton Bridge,
+  # all session-scoped). Notification only; the bump stays manual.
+  systemd.user.services.flake-pin-check = {
+    Unit = {
+      Description = "Check pinned flake inputs (falcond/scx-loader) for upstream updates";
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${flakePinCheck}/bin/flake-pin-check";
+    };
+  };
+
+  systemd.user.timers.flake-pin-check = {
+    Unit.Description = "Weekly check of pinned flake inputs for upstream updates";
+    Timer = {
+      OnCalendar = "Sun 11:00";
+      Persistent = true;          # catch up if the machine was off at the trigger
+      RandomizedDelaySec = "30m";
+    };
+    Install.WantedBy = [ "timers.target" ];
+  };
+
   # ============================================================
   # Live ~/.config dirs symlinked verbatim from the Fedora box.
   # recursive=true symlinks each file individually (live edits to unmanaged
@@ -705,11 +1035,6 @@
   # kept verbatim (harmless no-ops on NixOS).
   # ============================================================
   home.file.".zshrc".source = ./shell/zshrc;
-  xdg.configFile."starship.toml" = {
-    source = ./shell/starship.toml;
-    force = true;
-  };
-
   # ============================================================
   # CLI Tools
   # zsh integration is OFF for all of these: the real ~/.zshrc (symlinked
@@ -724,6 +1049,38 @@
   programs.brave-browser = {
     enable = true;
     package = inputs.brave-origin.packages.${pkgs.system}.brave-origin;
+    # Pin the password backend. Under Hyprland (no GNOME/KDE desktop hint)
+    # Chromium guesses the os_crypt backend per launch: gnome-libsecret when
+    # the keyring is up (cookies/passwords tagged v11), `basic`/"peanuts" when
+    # it is down (v10). The flip-flop -- plus a regenerated Safe Storage key
+    # during the old package-only gnome-keyring bug -- left v11 blobs
+    # undecryptable and logged the profile out everywhere. Keyring now
+    # auto-unlocks via PAM, so pin to it for a deterministic, stable key.
+    commandLineArgs = [ "--password-store=gnome-libsecret" ];
+  };
+
+  # Zed — GUI-native modal editor. Package comes from unstable `pkgs`
+  # (useGlobalPkgs). userSettings writes ~/.config/zed/settings.json; helix_mode
+  # turns on Helix-style modal editing.
+  programs.zed-editor = {
+    enable = true;
+    # Zed's Nix extension expects to download `nil`, but prebuilt binaries don't
+    # run on NixOS. Provide it from nixpkgs (also on Zed's PATH via extraPackages)
+    # and pin the store path so the extension stops asking to install it.
+    extraPackages = [ pkgs.nil pkgs.nixfmt ];
+    userSettings = {
+      helix_mode = true;
+      lsp.nil.binary.path = "${pkgs.nil}/bin/nil";
+      # Format-on-save for Nix via nixfmt (RFC 166 style). nixfmt reads stdin
+      # and writes stdout, so it slots straight into Zed's external formatter.
+      languages.Nix = {
+        formatter.external = {
+          command = "${pkgs.nixfmt}/bin/nixfmt";
+          arguments = [ ];
+        };
+        format_on_save = "on";
+      };
+    };
   };
 
   programs.zoxide = { enable = true; enableZshIntegration = false; };
@@ -788,18 +1145,42 @@
   # ============================================================
   gtk = {
     enable = true;
-    theme = { name = "adw-gtk3-dark"; package = pkgs.adw-gtk3; };
+    theme = {
+      name = "adw-gtk3-dark";
+      package = pkgs.adw-gtk3;
+    };
     iconTheme = { name = "Papirus-Dark"; package = pkgs.papirus-icon-theme; };
     cursorTheme = { name = "Bibata-Modern-Ice"; package = pkgs.bibata-cursors; size = 24; };
-    font = { name = "Inter"; size = 11; };
+    font = { name = "Inter"; size = 12; };
     gtk3.extraConfig = { gtk-application-prefer-dark-theme = true; };
+    gtk3.extraCss = ''@import url("file://${config.home.homeDirectory}/.config/gtk-3.0/noctalia.css");'';
     gtk4.extraConfig = { gtk-application-prefer-dark-theme = true; };
+    # Adopt the new HM default (no theme name for GTK4): libadwaita apps ignore
+    # GTK themes anyway, and noctalia colors come from gtk4.extraCss below, not
+    # the theme. Silences the stateVersion < 26.05 legacy-default warning.
+    gtk4.theme = null;
+    gtk4.extraCss = ''
+      @import url("file://${config.home.homeDirectory}/.config/gtk-4.0/noctalia.css");
+    '';
   };
-  xdg.configFile."gtk-4.0/gtk.css".force = true;
 
   qt = {
     enable = true;
     platformTheme.name = "qtct";
+  };
+
+  # GNOME font gsettings — the 4 slots in the Tweaks "Fonts" panel.
+  # Read by GTK apps + xdg-portal. 34" UW @ 1440p ≈ 109 PPI (like 27"/1440p),
+  # so 12pt is comfortable; bump to 13 here if you want roomier.
+  dconf.settings = {
+    "org/gnome/desktop/interface" = {
+      font-name = "Inter 12";            # Interface
+      document-font-name = "Inter 12";   # Document
+      monospace-font-name = "IoskeleyMono Nerd Font 12";  # Monospace
+    };
+    "org/gnome/desktop/wm/preferences" = {
+      titlebar-font = "Inter 12";        # Legacy window titles
+    };
   };
 
   home.pointerCursor = {

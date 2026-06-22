@@ -1,101 +1,125 @@
-# NixOS Configuration - MangoWC Migration
+# NixOS Config (flake)
 
-## Summary of Changes
+My personal NixOS configuration, published as a reference. It is a Nix **flake**
+with **Home Manager**, two Wayland window managers (**MangoWC** primary,
+**Hyprland** secondary), the `ly` display manager, **agenix** for secrets, and a
+handful of out-of-tree packages built from source.
 
-This configuration migrates from GNOME to MangoWC as the primary window manager/compositor.
+> ⚠️ This is **not** a turnkey config. It is pinned to my hardware, my username,
+> and my network. Clone it as a starting point and work through the
+> [Make it yours](#make-it-yours) checklist below before building anything.
 
-### Key Changes
-
-1. **flake.nix**
-   - Added `mango` flake input from `github:DreamMaoMao/mango`
-   - Added `mango.nixosModules.mango` to system modules
-   - Passed `mango` to Home Manager's `extraSpecialArgs`
-
-2. **desktop/default.nix**
-   - Commented out GNOME import (can re-enable if needed)
-   - Added MangoWC import
-   - Switched from GDM to `greetd` with `tuigreet` (lightweight, works well with tiling WMs)
-   - Updated xdg-portal config for wlroots
-
-3. **desktop/mangowc.nix** (NEW)
-   - System-level MangoWC enable (`programs.mango.enable = true`)
-   - Essential packages for MangoWC (foot, fuzzel, swaybg, etc.)
-
-4. **home/username.nix**
-   - Added `wayland.windowManager.mango` config using Home Manager module
-   - Your config.conf content is in `settings`
-   - Your autostart commands are in `autostart_sh`
-   - Additional config files (env.conf, appearance.conf, binds.conf, rules.conf) via `home.file`
-   - Scripts in `~/.config/mango/scripts/` (executable)
-   - Hyprland disabled by default (set `enable = true` to use alongside MangoWC)
-
-5. **system/default.nix**
-   - Removed GNOME extensions from packages
-   - Updated XDG_CURRENT_DESKTOP to `wlroots`
-   - Added MangoWC-friendly packages
-
-### File Structure
+## Layout
 
 ```
-nixos-config/
-├── flake.nix                    # Updated with mango input
-├── configuration.nix            # Unchanged
+.
+├── flake.nix                 # inputs + the `nixosConfigurations.nixos` output
+├── configuration.nix         # top-level glue
+├── hardware-configuration.nix # MACHINE-SPECIFIC — regenerate on your hardware
 ├── core/
-│   ├── default.nix              # Unchanged
-│   └── users.nix                # Unchanged
+│   ├── default.nix           # hostname, timezone, locale, base system
+│   ├── users.nix             # the user account (name + groups)
+│   └── nfs-mounts.nix        # NFS media mounts (LAN NAS — optional)
 ├── desktop/
-│   ├── default.nix              # Updated - no GNOME, greetd instead of GDM
-│   ├── gnome.nix                # Kept for reference (not imported)
-│   ├── hyprland.nix             # Kept (still available)
-│   ├── mangowc.nix              # NEW - MangoWC system config
-│   └── niri.nix                 # Unchanged
-├── hardware/
-│   └── default.nix              # Unchanged
+│   ├── default.nix           # ly display manager + xdg portals
+│   ├── mangowc.nix           # MangoWC (primary WM) system bits
+│   └── hyprland.nix          # Hyprland (secondary WM) system bits
 ├── home/
-│   └── username.nix            # Updated with MangoWC Home Manager config
+│   ├── username.nix          # Home Manager config (rename to your user)
+│   ├── config/               # app dotfiles (kitty, foot, waybar, mpv, yazi, …)
+│   ├── hypr/                 # Hyprland config (Lua)
+│   ├── scripts/              # session/autostart helper scripts
+│   └── shell/                # zsh + starship
 ├── modules/
-│   ├── default.nix              # Unchanged
-│   ├── gaming.nix               # Unchanged
-│   ├── mullvad.nix              # Unchanged
-│   └── obs.nix                  # Unchanged
-└── system/
-    └── default.nix              # Updated - removed GNOME stuff
+│   ├── agenix.nix            # age-encrypted secrets wiring
+│   ├── yubikey.nix           # pcscd + age-plugin-yubikey
+│   ├── gaming.nix            # Steam, gamemode, gamescope, etc.
+│   ├── falcond.nix           # PikaOS gaming daemon (built from pkgs/falcond)
+│   ├── mullvad.nix, obs.nix, streamdeck.nix, default.nix
+├── pkgs/
+│   ├── falcond/              # built-from-source (Zig)
+│   └── scx-loader/           # built-from-source (Rust)
+├── secrets/                  # agenix: secrets.nix (recipients) + *.age blobs
+└── system/                   # system-wide package set
 ```
 
-### Usage
+## Make it yours
 
-1. Copy these files to your NixOS config directory
-2. Make sure you have your `hardware-configuration.nix` in place
-3. Run:
-   ```bash
-   sudo nixos-rebuild switch --flake .#nixos
-   ```
+Everything that is specific to me has been replaced with an obvious placeholder.
+Search the tree for these and edit them. `grep -rn '<PLACEHOLDER>' .` finds each.
 
-4. After reboot, you'll get `tuigreet` - select MangoWC to launch
+### 1. User account  (required)
 
-### Switching Between Compositors
+| Placeholder | Where | Change to |
+|---|---|---|
+| `username` | `core/users.nix`, `modules/default.nix` (syncthing), `home/username.nix` (`home.username`, `home.homeDirectory`), `flake.nix` (`users.username`, `./home/username.nix`), various `/home/username/...` paths | your login name |
+| `home/username.nix` (filename) | `git mv home/username.nix home/<you>.nix` and update the import in `flake.nix` | your login name |
+| `Your Name` | `core/users.nix` (`description`) | your full name (or anything) |
 
-With greetd/tuigreet, you can choose which compositor to launch at login:
-- `mango` - MangoWC
-- `Hyprland` - Hyprland (if enabled)
-- `niri` - Niri
+A repo-wide rename is the fastest path:
 
-### Notes
+```bash
+grep -rIl --exclude-dir=.git username . | xargs sed -i 's/username/<YOUR_USER>/g'
+git mv home/username.nix home/<YOUR_USER>.nix   # then fix the import in flake.nix
+```
 
-- **Waybar**: Configured with your MangoWC-specific setup including:
-  - Custom tags module (`custom/mango_tags`)
-  - Active window title via `wlrctl`
-  - VPN status (Mullvad/WireGuard)
-  - All your scripts in `~/.config/waybar/scripts/`
-- **Scripts**: Moved from `~/.config/mango/keybindscripts/` to `~/.config/mango/scripts/`
-- **Autostart**: Some PikaOS-specific things removed (pikman, appimages). Adjust as needed.
-- **foot**: Set as default terminal in MangoWC config (was in your env.conf)
-- **wlrctl**: Added for waybar active window detection on wlroots compositors
+### 2. Machine + hardware  (required)
 
-### If Something Breaks
+- **`hardware-configuration.nix`** — DO NOT use mine. Generate your own on the
+  target machine: `sudo nixos-generate-config` and copy in the result (it has
+  your disk UUIDs, filesystems, and kernel modules). `hardware-configuration.nix.bak`
+  is just my old copy — delete it.
+- `core/default.nix`: `networking.hostName = "nixos"` → your hostname.
+- `core/default.nix`: `time.timeZone = "America/Chicago"` and
+  `i18n.defaultLocale` → your region.
 
-1. Boot to TTY (Ctrl+Alt+F2)
-2. Login as your user
-3. Edit `/etc/nixos/desktop/default.nix` to uncomment GNOME
-4. `sudo nixos-rebuild switch --flake /etc/nixos#nixos`
-5. Reboot and use GDM/GNOME to debug
+### 3. Network / NAS  (optional)
+
+| Placeholder | Where | Notes |
+|---|---|---|
+| `<NAS-IP>` | `core/nfs-mounts.nix` | NFS server IP. The share paths (`/tank/...`) are mine — rewrite or **remove the import** from `core/default.nix` if you have no NAS. |
+| `<SERVER-IP>` | `INSTALL.md` | a LAN Gitea I pull dotfiles from — informational only |
+| `<HOST-IP>` | `home/shell/zshrc` | an `ssh` alias — edit or delete |
+
+### 4. Mail (Proton Bridge)  (optional)
+
+`home/username.nix` and `home/scripts/flake-pin-check.sh` configure mbsync/msmtp
+against a local **Proton Bridge** (`127.0.0.1`), reading the password from
+`~/.authinfo.gpg`. Replace `your-email@example.com` with your address, or delete
+the `programs.mbsync` / `programs.msmtp` blocks if you don't use this.
+
+### 5. Secrets (agenix)  (optional — only if you use it)
+
+`secrets/secrets.nix` lists the **public** recipients every secret is encrypted
+to. Mine are stripped to placeholders, so the encrypted blobs are **not**
+included — you must create your own:
+
+1. Replace `age1yubikey1REPLACE_WITH_YOUR_OWN_RECIPIENT` with your own
+   age/YubiKey recipient(s) — `age-plugin-yubikey --list`, or use a plain
+   `age` keypair (`age-keygen`).
+2. Replace `AAAA_REPLACE_WITH_YOUR_HOST_PUBKEY` with your machine's host key:
+   `cat /etc/ssh/ssh_host_ed25519_key.pub` (this is the raw ssh key — agenix uses
+   age's native ssh support, **not** an `ssh-to-age` `age1…` value).
+3. Create a secret: `cd secrets && agenix -e example.age`, then uncomment the
+   `age.secrets.example` block in `modules/agenix.nix`.
+
+If you don't want secrets at all, remove `./agenix.nix` from `modules/default.nix`,
+drop the `agenix` input from `flake.nix`, and delete `secrets/`.
+
+### 6. Trim what you don't want
+
+The package sets and modules are tuned for my use (gaming, OBS, Stream Deck,
+Mullvad, falcond, scx-loader). Drop modules from `modules/default.nix` and
+packages from `system/default.nix` as needed — `falcond`/`scx-loader` in `pkgs/`
+build from source and can be removed with their modules.
+
+## Build
+
+Once the checklist is done and `hardware-configuration.nix` is yours:
+
+```bash
+sudo nixos-rebuild switch --flake .#nixos   # rename the output in flake.nix if you changed the hostname
+```
+
+At the `ly` login screen pick **mango** (or **Hyprland**) from the session list.
+See `INSTALL.md` for the full from-scratch install walkthrough.

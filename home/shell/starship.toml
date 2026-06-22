@@ -1,5 +1,5 @@
 # Starship — tide/fish replica
-# Colors from decoded fish_variables tide theme: #5fd700 chartreuse, #949494 gray, #87875f olive
+# Colors from noctalia palette: green = accent, subtext0 = secondary, overlay1 = dim
 "$schema" = 'https://starship.rs/config-schema.json'
 palette = "noctalia"
 
@@ -26,8 +26,8 @@ home_symbol       = '~'
 
 # ── Git branch ────────────────────────────────────────────────────────────
 [git_branch]
-format = '[#](bold #949494)[$branch(:$remote_branch)]($style) '
-style  = 'bold #5fd700'
+format = '[#](bold subtext0)[$branch(:$remote_branch)]($style) '
+style  = 'bold green'
 symbol = ''
 truncation_length = 24
 truncation_symbol = '…'
@@ -40,7 +40,7 @@ style  = 'bold yellow'
 # ── Git status ────────────────────────────────────────────────────────────
 [git_status]
 format     = '([$all_status$ahead_behind]($style) )'
-style      = 'bold #5fd700'
+style      = 'bold green'
 conflicted = '!'
 ahead      = '⇡${count}'
 behind     = '⇣${count}'
@@ -54,70 +54,70 @@ deleted    = '✘'
 
 # ── Prompt character (❯ like tide) ────────────────────────────────────────
 [character]
-success_symbol = '[❯](bold #5fd700)'
+success_symbol = '[❯](bold green)'
 error_symbol   = '[❯](bold red)'
-vimcmd_symbol  = '[❮](bold #5fd700)'
+vimcmd_symbol  = '[❮](bold green)'
 
 # ── Command duration ──────────────────────────────────────────────────────
 [cmd_duration]
 min_time           = 2000
 format             = '[$duration]($style) '
-style              = '#87875f'
+style              = 'overlay1'
 show_notifications = false
 
 # ── Languages (matching tide right-side items) ────────────────────────────
 [python]
 format            = '[$symbol$version]($style) '
 symbol            = ' '
-style             = '#5fd700'
+style             = 'green'
 detect_extensions = ['py']
 detect_files      = ['requirements.txt', 'setup.py', 'pyproject.toml', '.python-version']
 
 [rust]
 format = '[$symbol$version]($style) '
 symbol = ' '
-style  = '#5fd700'
+style  = 'green'
 
 [golang]
 format = '[$symbol$version]($style) '
 symbol = ' '
-style  = '#5fd700'
+style  = 'green'
 
 [nodejs]
 format = '[$symbol$version]($style) '
 symbol = ' '
-style  = '#5fd700'
+style  = 'green'
 
 [zig]
 format = '[$symbol$version]($style) '
 symbol = ' '
-style  = '#5fd700'
+style  = 'green'
 
 [bun]
 format = '[$symbol$version]($style) '
-style  = '#5fd700'
+style  = 'green'
 
 [java]
 format = '[$symbol$version]($style) '
-style  = '#5fd700'
+style  = 'green'
 
 # ── Context — only show on SSH or root ───────────────────────────────────
 [username]
 format      = '[$user]($style)@'
-style_user  = '#949494'
+style_user  = 'subtext0'
 style_root  = 'bold red'
 show_always = false
 
 [hostname]
 format   = '[$ssh_symbol$hostname]($style) '
-style    = '#949494'
+style    = 'subtext0'
 ssh_only = true
 
 # ── Jobs ─────────────────────────────────────────────────────────────────
 [jobs]
 format           = '[$symbol$number]($style) '
 symbol           = '✦'
-style            = '#5fd700'
+style            = 'green'
 number_threshold = 1
 symbol_threshold = 1
 

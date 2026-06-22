@@ -179,7 +179,7 @@ bind_exec(M .. " + c", "noctalia msg panel-toggle control-center")
 bind_exec(M .. " + SHIFT + n", "noctalia msg panel-toggle control-center notifications")
 bind_exec(M .. " + SHIFT + c", "noctalia msg notification-clear-active")
 bind_sh(M .. " + p", "cliphist list | fuzzel --dmenu | cliphist decode | wl-copy")
-bind_exec(M .. " + semicolon", "/home/username/.local/bin/rofimoji --action copy --selector fuzzel --prompt Emoji")
+bind_exec(M .. " + semicolon", "rofimoji --action copy --selector fuzzel --prompt Emoji")
 bind_exec(M .. " + v", "kitty --class wiremix wiremix")
 
 bind_exec("XF86AudioRaiseVolume", "noctalia msg volume-up", { locked = true, repeating = true })

@@ -41,6 +41,7 @@
     nerd-fonts.dejavu-sans-mono
     nerd-fonts.symbols-only
     nerd-fonts.jetbrains-mono
+    ioskeley-mono.normal-NF       # Iosevka tuned to mimic Berkeley Mono, normal width, nerd-patched
     material-symbols
     material-design-icons
     dejavu_fonts
@@ -50,6 +51,17 @@
     noto-fonts                    # Fedora: google-noto-sans-fonts
     font-awesome_4                # Fedora: fontawesome4-fonts
   ];
+
+  # ============================================================
+  # Secret service (GNOME Keyring)
+  # ============================================================
+  # Provides org.freedesktop.secrets so gpg-agent can cache passphrases
+  # and Proton Mail Bridge can reach a keychain. The module also creates
+  # the setuid /run/wrappers/bin/gnome-keyring-daemon wrapper that the
+  # D-Bus activation file needs, plus PAM auto-unlock at login.
+  # (Package alone in systemPackages is NOT enough — that was the bug:
+  #  wrapper missing -> dbus activation "unit failed" -> no secret service.)
+  services.gnome.gnome-keyring.enable = true;
 
   environment.systemPackages =
     # ========================================================
@@ -71,7 +83,12 @@
       vesktop                     # Fedora: vesktop (REPLACES discord)
       signal-desktop              # Fedora: signal-desktop
       telegram-desktop            # Fedora: telegram-desktop
+      teamspeak6-client           # TeamSpeak 6 beta voice client
       fractal                     # Matrix client (replaces nheko; uses matrix-rust-sdk, no libolm)
+      iamb                        # Matrix TUI (vim-like; matrix-rust-sdk)
+      aerc                        # mail TUI (works against Proton Bridge IMAP/SMTP like mu4e)
+      dino                        # XMPP/Jabber GUI client (OMEMO)
+      protonmail-bridge           # Proton Mail Bridge; autostarted by Hyprland
 
       # --- Terminals (bound / daily) ---
       kitty                       # bind M+Return
@@ -79,7 +96,7 @@
       alacritty
 
       # --- Editors (bound / daily) ---
-      emacs                       # bind M+e (emacs-focus.sh)
+      ((emacsPackagesFor emacs).emacsWithPackages (epkgs: [ epkgs.mu4e ])) # bind M+e (emacs-focus.sh)
       neovim
       neovide                     # Fedora: neovide
 
@@ -105,6 +122,11 @@
       yt-dlp
       jq
       yq-go                       # Fedora: yq
+      pipx                        # Fedora: pipx (unstable: 1.14.0, cached, no test hack)
+      mu                          # mu/mu4e indexer for Doom Emacs mail
+      isync                       # mbsync for Proton Bridge -> Maildir
+      msmtp                       # sendmail-compatible SMTP client for mu4e
+      openssl                     # debug local Proton Bridge TLS
 
       # --- Wayland shell / bound utilities ---
       inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default  # noctalia v5 bar
@@ -172,7 +194,6 @@
       weechat                     # Fedora: weechat
       pandoc                      # Fedora: pandoc-cli
       shellcheck                  # Fedora: ShellCheck
-      pipx                        # Fedora: pipx
       mediainfo                   # Fedora: mediainfo
       ffmpegthumbnailer           # Fedora: ffmpegthumbnailer
       chafa                       # Fedora: chafa
@@ -194,18 +215,22 @@
       # --- Media ---
       vlc
       mpv
+      youtube-tui                 # TUI YouTube client; plays via mpv (inherits sponsorblock.so)
       kew                         # Fedora: kew
       mpd                         # Fedora: mpd
       mpc                         # Fedora: mpc
       cava                        # (kept: configured in home/username.nix)
 
       # --- Audio routing / production ---
-      helvum                      # Fedora: helvum
+      # (helvum dropped: removed from stable 26.05 as unmaintained + vulnerable
+      # dep; it was only a manual GUI patchbay, redundant with qpwgraph, and not
+      # used by the streamdeck-audio routing.)
       qpwgraph                    # Fedora: qpwgraph
       qjackctl                    # Fedora: qjackctl
       carla                       # Fedora: Carla
       audacity                    # Fedora: audacity
       pamixer                     # Fedora: pamixer (used by scripts)
+      pulseaudio                  # provides pactl/pacmd for streamdeck-audio scripts
       alsa-scarlett-gui           # Scarlett 2i2 interface
 
       # --- File managers ---
@@ -215,12 +240,15 @@
       gnome-disk-utility
       gparted                     # Fedora: gparted
 
+      # --- Mail clients ---
+      tutanota-desktop            # Tuta mail desktop client
+
       # --- Security / sync / torrents ---
       keepassxc                   # Fedora: keepassxc
       seahorse                    # Fedora: seahorse
       transmission_4-gtk          # Fedora: transmission-gtk
       feather                     # Fedora: feather (Monero wallet) -- verify attr on rebuild
-
+	
       # --- Development toolchains ---
       vscodium                    # Fedora: codium (REPLACES vscode)
       cmake
@@ -285,8 +313,6 @@
 
       # --- Wayland / desktop utilities (non-bound) ---
       waybar
-      swaynotificationcenter      # Fedora: SwayNotificationCenter
-      mako                        # Fedora: mako
       swaybg
       swayidle
       swaylock                    # Fedora: swaylock (plain; REPLACES swaylock-effects)

@@ -2,9 +2,6 @@
 
 {
   imports = [
-    # GNOME kept available (Fedora has the full GNOME stack + GDM installed)
-    ./gnome.nix
-
     # Hyprland = PRIMARY WM on the Fedora box (hyprland-git, native lua config)
     ./hyprland.nix
 
@@ -31,16 +28,12 @@
   security.polkit.enable = true;
   security.soteria.enable = true;
 
-  # Display manager: GDM, matching the Fedora box (GDM default session =
-  # hyprland-uwsm). greetd/tuigreet kept below as a commented fallback.
-  services.displayManager.gdm.enable = true;
+  # Keyboard layout (was in the now-removed gnome.nix; consumed by any X
+  # fallback / XWayland greeter bits).
+  services.xserver.xkb.layout = "us";
 
-  # --- Fallback: greetd + tuigreet (uncomment to use instead of GDM) ---
-  # services.greetd = {
-  #   enable = true;
-  #   settings.default_session = {
-  #     command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd Hyprland";
-  #     user = "greeter";
-  #   };
-  # };
+  # Display manager: ly (lightweight TTY greeter). It enumerates the
+  # wayland-sessions registered by programs.hyprland / programs.mango, so
+  # Hyprland and MangoWC both show up in the session picker.
+  services.displayManager.ly.enable = true;
 }

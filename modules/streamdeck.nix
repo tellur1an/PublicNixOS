@@ -31,6 +31,12 @@ let
   '';
 in
 {
+  # Native StreamController (replaces the com.core447.StreamController flatpak).
+  # The nixpkgs build still defaults its DATA_PATH to
+  # ~/.var/app/com.core447.StreamController/data, so the existing pages,
+  # plugins and settings carry over with no migration.
+  environment.systemPackages = [ pkgs.streamcontroller ];
+
   services.udev.extraRules = ''
     # Stream Deck MK.2 (0fd9:0080): raw USB (libusb) access for the logged-in user.
     SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", TAG+="uaccess"

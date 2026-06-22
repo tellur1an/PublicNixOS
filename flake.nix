@@ -9,7 +9,7 @@
     # Stable channel: everything that is NOT a daily driver / gaming / bound
     # (office, occasional GUI apps, system utilities, dev toolchains, libs).
     # Exposed to modules as `pkgs-stable` via specialArgs.
-    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-26.05";
 
     home-manager = {
       url = "github:nix-community/home-manager";
@@ -55,6 +55,27 @@
     };
 
     chaotic.url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
+
+    # agenix - age-encrypted secrets, decrypted at activation. Secrets are
+    # encrypted to the host SSH key (always-available -> auto-decrypt at boot)
+    # AND to YubiKey age identities (age-plugin-yubikey) so any YubiKey can
+    # decrypt/rekey on a fresh machine. See secrets/secrets.nix + secrets/README.md.
+    agenix = {
+      url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # falcond - PikaOS gaming optimization daemon. Not in nixpkgs; built from
+    # source (Zig) with zig2nix. See pkgs/falcond + modules/falcond.nix.
+    zig2nix.url = "github:Cloudef/zig2nix";
+    falcond-src = {
+      url = "github:PikaOS-Linux/falcond/5ca886416dffaea92ebd79cfc5f2295f92349447";
+      flake = false;
+    };
+    falcond-profiles = {
+      url = "github:PikaOS-Linux/falcond-profiles/5023a846980685812334586ae265f8f6a1ded38b";
+      flake = false;
+    };
   };
 
   outputs = { self, nixpkgs, nixpkgs-stable, home-manager, mango-flake, hyprland, hyprland-contrib, hyprland-plugins, noctalia, chaotic, ... }@inputs:
@@ -65,13 +86,20 @@
         inherit system;
         config.allowUnfree = true;
       };
+      # falcond package, built from source via zig2nix and threaded into
+      # modules through specialArgs (consumed by modules/falcond.nix).
+      falcond = import ./pkgs/falcond {
+        inherit system;
+        inherit (inputs) zig2nix falcond-src falcond-profiles;
+      };
     in {
       nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
         inherit system;
-        specialArgs = { inherit inputs chaotic mango-flake noctalia pkgs-stable; };
+        specialArgs = { inherit inputs chaotic mango-flake noctalia pkgs-stable falcond; };
         modules = [
           ./configuration.nix  # YOUR ORIGINAL configuration.nix - don't replace this
           chaotic.nixosModules.default
+          inputs.agenix.nixosModules.default  # registers `age.secrets.*` (see modules/agenix.nix)
 
           # 1. Enable the system-level module (registers programs.mango)
           mango-flake.nixosModules.mango

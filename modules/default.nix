@@ -3,8 +3,10 @@
 {
   imports = [
     ./gaming.nix
+    ./falcond.nix      # PikaOS gaming optimization daemon (services.falcond)
     ./mullvad.nix
     ./yubikey.nix      # YubiKey 5: pcscd, udev, ykman, FIDO2 sk-ssh support
+    ./agenix.nix       # age-encrypted secrets (host key + YubiKey recipients)
     ./obs.nix          # NOTE: OBS is not installed on the Fedora box, but the
                        # streaming gear (Scarlett 2i2 / StreamDeck) and the
                        # v4l2loopback "OBS Cam" in core/ justify keeping it.
@@ -31,9 +33,16 @@
   # --- Fan / GPU control daemon ---
   programs.coolercontrol.enable = true;     # Fedora: coolercontrol
 
-  # NOTE: keyd (Fedora: keyd, used for the Naga remap) is installed as a
-  # package. Enabling services.keyd needs the machine-specific keyboard +
-  # hash config (see input_remapper_naga memory) -- configure after install.
+  # keyd: excludes the Razer Naga and one other device from keyd's capture
+  # so input-remapper can handle them without double-interception.
+  # The [main] section is intentionally empty (no remaps defined on Fedora).
+  services.keyd = {
+    enable = true;
+    keyboards.default = {
+      ids = [ "*" "-3553:b001" "-1532:00b4:6abe215d" "-1532:00b4:e1b77aa2" ];
+      settings.main = {};
+    };
+  };
 
   services.pipewire = {
     enable = true;
