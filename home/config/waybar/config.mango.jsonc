@@ -1,0 +1,161 @@
+{
+  "reload_style_on_change": true,
+  "layer": "top",
+  "position": "top",
+
+  // Ashell-ish: slightly tighter slab
+  "height": 34,
+  "spacing": 6,
+
+  "output": ["DP-2"],
+
+  "modules-left": [
+    "custom/launcher",
+    "custom/mango_tags",
+    "mpris"
+  ],
+
+  "modules-center": [
+    "custom/active_window"
+  ],
+
+  "modules-right": [
+    "group/tray-drawer",
+    "network",
+    "custom/vpn",
+    "pulseaudio",
+    "memory",
+    "cpu",
+    "temperature",
+    "power-profiles-daemon",
+    "clock"
+  ],
+
+  "custom/launcher": {
+    "format": "",
+    "tooltip": false,
+    "on-click": "walker"
+  },
+
+  // ==========================
+  // MangoWC SAFE tags (no dwl/tags)
+  // ==========================
+  "custom/mango_tags": {
+    "exec": "~/.local/bin/mango-waybar-tags",
+    "return-type": "json",
+    "interval": 1,
+    "tooltip": true,
+    "tooltip-format": "MangoWC tags\nScroll: next/prev\nL/R click: next/prev\nMiddle: pick tag",
+
+    "on-scroll-up": "~/.local/bin/mango-tags-cycle next",
+    "on-scroll-down": "~/.local/bin/mango-tags-cycle prev",
+
+    "on-click": "~/.local/bin/mango-tags-cycle next",
+    "on-click-right": "~/.local/bin/mango-tags-cycle prev",
+    "on-click-middle": "~/.local/bin/mango-tags-pick"
+  },
+
+  // Active window title (works on river via wlrctl script below)
+  "custom/active_window": {
+    "exec": "~/.config/waybar/scripts/active_window.py",
+    "return-type": "json",
+    "interval": 2,
+    "tooltip": true,
+    "hide-empty": true
+  },
+
+  "mpris": {
+    "format": "{player_icon} {dynamic}",
+    "format-paused": "{status_icon} <i>{dynamic}</i>",
+    "format-stopped": "",
+    "dynamic-order": ["title", "artist"],
+    "status-icons": { "paused": "⏸" },
+
+    // Ashell-ish: keep left side calmer
+    "max-length": 40
+  },
+
+  "group/tray-drawer": {
+    "orientation": "inherit",
+    "drawer": {
+      // Ashell-ish: snappier
+      "transition-duration": 150,
+      "children-class": "tray-drawer-hidden",
+      "click-to-reveal": true,
+      "transition-left-to-right": true
+    },
+    "modules": ["custom/tray-toggle", "tray"]
+  },
+
+  "custom/tray-toggle": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "System tray"
+  },
+
+  "tray": { "icon-size": 16, "spacing": 12 },
+
+  "network": {
+    "format-icons": ["󰤯","󰤟","󰤢","󰤥","󰤨"],
+    "format": "{icon} {signalStrength}%",
+    "format-ethernet": "󰀂",
+    "format-disconnected": "󰖪",
+    "tooltip-format-wifi": "{essid} ({frequency} GHz)\n⇣{bandwidthDownBytes} ⇡{bandwidthUpBytes}",
+    "tooltip-format-ethernet": "⇣{bandwidthDownBytes} ⇡{bandwidthUpBytes}",
+    "tooltip-format-disconnected": "Disconnected",
+    "interval": 3,
+    "on-click": "nm-connection-editor"
+  },
+
+  // VPN status as JSON so CSS can dim OFF easily (class=on/off)
+  "custom/vpn": {
+    "exec": "bash -lc ~/.local/bin/waybar-vpn-json",
+    "return-type": "json",
+    "interval": 2,
+    "tooltip": true,
+    "tooltip-format": "WireGuard via NetworkManager\nLeft-click: open connections",
+    "on-click": "nm-connection-editor"
+  },
+
+  "pulseaudio": {
+    "format": "󰕾 {volume}%",
+    "format-muted": "󰝟 muted",
+    "scroll-step": 5,
+    "on-click": "pamixer -t",
+    "on-click-right": "pwvucontrol"
+  },
+
+  "memory": {
+    "format": "󰍛 {percentage}%",
+    "interval": 3
+  },
+
+  "cpu": {
+    "format": "󰻠 {usage}%",
+    "interval": 3
+  },
+
+  "temperature": {
+    "format": "󰔏 {temperatureC}°C",
+    "critical-threshold": 80,
+    "hwmon-path": "/sys/class/hwmon/hwmon4/temp1_input",
+    "interval": 3
+  },
+
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip-format": "Power profile: {profile}\nDriver: {driver}",
+    "tooltip": true,
+    "format-icons": {
+      "default": "",
+      "performance": "󰓅",
+      "balanced": "",
+      "power-saver": "󰾆"
+    }
+  },
+
+  "clock": {
+    "format": "󰥔 {:%H:%M}",
+    "tooltip": false
+  }
+}

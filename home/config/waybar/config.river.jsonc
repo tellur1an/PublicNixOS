@@ -1,0 +1,140 @@
+{
+  "reload_style_on_change": true,
+  "layer": "top",
+  "position": "top",
+  "height": 36,
+
+  // Give modules breathing room (you had 0)
+  "spacing": 10,
+
+  // Keep your single-output preference
+  "output": ["DP-2"],
+
+  "modules-left": [
+    "custom/launcher",
+    "river/tags",
+    "mpris"
+  ],
+
+  "modules-center": [
+    "custom/active_window"
+  ],
+
+  "modules-right": [
+    "group/tray-drawer",
+    "network",
+    "pulseaudio",
+    "memory",
+    "cpu",
+    "temperature",
+    "power-profiles-daemon",
+    "clock"
+  ],
+
+  "custom/launcher": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "Launcher (Super+Space)",
+    "on-click": "walker"
+  },
+
+  // River tags (replaces hyprland/workspaces)
+  "river/tags": {
+    "num-tags": 9,
+    "tag-labels": ["󰈹", "󰭹", "󰇮", "󰖟", "", "", "󰕼", "󰅒", ""],
+    "disable-click": false,
+    "on-scroll-up": "~/.local/bin/river-tags-cycle next",
+    "on-scroll-down": "~/.local/bin/river-tags-cycle prev"
+  },
+
+  // Active window title (works on river via wlrctl script below)
+  "custom/active_window": {
+    "exec": "~/.config/waybar/scripts/active_window.py",
+    "return-type": "json",
+    "interval": 2,
+    "tooltip": true,
+    "hide-empty": true
+  },
+
+  "mpris": {
+    "format": "{player_icon} {dynamic}",
+    "format-paused": "{status_icon} <i>{dynamic}</i>",
+    "format-stopped": "",
+    "dynamic-order": ["title", "artist"],
+    "status-icons": { "paused": "⏸" },
+    "max-length": 50
+  },
+
+  "group/tray-drawer": {
+    "orientation": "inherit",
+    "drawer": {
+      "transition-duration": 250,
+      "children-class": "tray-drawer-hidden",
+      "click-to-reveal": true,
+      "transition-left-to-right": true
+    },
+    "modules": ["custom/tray-toggle", "tray"]
+  },
+
+  "custom/tray-toggle": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "System tray"
+  },
+
+  "tray": { "icon-size": 16, "spacing": 12 },
+
+  "network": {
+    "format-icons": ["󰤯","󰤟","󰤢","󰤥","󰤨"],
+    "format": "{icon} {signalStrength}%",
+    "format-ethernet": "󰀂",
+    "format-disconnected": "󰖪",
+    "tooltip-format-wifi": "{essid} ({frequency} GHz)\n⇣{bandwidthDownBytes} ⇡{bandwidthUpBytes}",
+    "tooltip-format-ethernet": "⇣{bandwidthDownBytes} ⇡{bandwidthUpBytes}",
+    "tooltip-format-disconnected": "Disconnected",
+    "interval": 3,
+    "on-click": "nm-connection-editor"
+  },
+
+  "pulseaudio": {
+    "format": "󰕾 {volume}%",
+    "format-muted": "󰝟 muted",
+    "scroll-step": 5,
+    "on-click": "pamixer -t",
+    "on-click-right": "pwvucontrol"
+  },
+
+  "memory": {
+    "format": "󰍛 {percentage}%",
+    "interval": 3
+  },
+
+  "cpu": {
+    "format": "󰻠 {usage}%",
+    "interval": 3
+  },
+
+  "temperature": {
+    "format": "󰔏 {temperatureC}°C",
+    "critical-threshold": 80,
+    "hwmon-path": "/sys/class/hwmon/hwmon4/temp1_input",
+    "interval": 3
+  },
+
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip-format": "Power profile: {profile}\nDriver: {driver}",
+    "tooltip": true,
+    "format-icons": {
+      "default": "",
+      "performance": "󰓅",
+      "balanced": "",
+      "power-saver": "󰾆"
+    }
+  },
+
+  "clock": {
+    "format": "󰥔 {:%H:%M}",
+    "tooltip": false
+  }
+}

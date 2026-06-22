@@ -1,0 +1,71 @@
+-- Simple SponsorBlock script for mpv
+local utils = require 'mp.utils'
+local msg = require 'mp.msg'
+local options = require 'mp.options'
+
+local o = {
+    categories = "sponsor,selfpromo,interaction,intro,outro"
+}
+options.read_options(o, "sponsorblock")
+
+local segments = {}
+
+local function fetch_segments(video_id)
+    local url = string.format('https://sponsor.ajay.app/api/skipSegments?videoID=%s&category=sponsor&category=selfpromo&category=interaction&category=intro&category=outro', video_id)
+    
+    local res = utils.subprocess({
+        args = {"curl", "-s", "-L", url},
+        cancellable = false
+    })
+    
+    if res.status == 0 and res.stdout and res.stdout ~= "" and res.stdout ~= "Not Found" then
+        return res.stdout
+    end
+    return nil
+end
+
+local function check_position()
+    local pos = mp.get_property_number("time-pos")
+    if not pos then return end
+    
+    for _, seg in ipairs(segments) do
+        if pos >= seg[1] and pos < seg[2] then
+            msg.info(string.format("Skipping segment: %.1fs -> %.1fs", seg[1], seg[2]))
+            mp.set_property_number("time-pos", seg[2])
+            mp.osd_message(string.format("Skipped sponsor (%.0fs)", seg[2] - seg[1]))
+            return
+        end
+    end
+end
+
+local function load_segments()
+    segments = {}
+    local path = mp.get_property("path", "")
+    local video_id = path:match("v=([^&]+)") or path:match("youtu%.be/([^?]+)")
+    
+    if not video_id then return end
+    
+    msg.info("Fetching segments for " .. video_id)
+    local data = fetch_segments(video_id)
+    
+    if not data then
+        msg.info("No segments found")
+        return
+    end
+    
+    -- Parse JSON manually
+    for start_str, end_str in data:gmatch('"segment":%[([%d%.]+),([%d%.]+)%]') do
+        local start_time = tonumber(start_str)
+        local end_time = tonumber(end_str)
+        table.insert(segments, {start_time, end_time})
+    end
+    
+    if #segments > 0 then
+        msg.info(string.format("Loaded %d segments", #segments))
+        mp.observe_property("time-pos", "number", check_position)
+    else
+        msg.info("No segments found")
+    end
+end
+
+mp.register_event("file-loaded", load_segments)

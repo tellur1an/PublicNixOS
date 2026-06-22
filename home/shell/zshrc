@@ -1,0 +1,581 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║                   ~/.zshrc — fish refugee                   ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+# ── Performance: skip for non-interactive ────────────────────────────────────
+[[ $- != *i* ]] && return
+
+# ── Zinit bootstrap ──────────────────────────────────────────────────────────
+ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
+if [[ ! -d "$ZINIT_HOME" ]]; then
+    mkdir -p "$(dirname "$ZINIT_HOME")"
+    git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+fi
+source "${ZINIT_HOME}/zinit.zsh"
+autoload -Uz _zinit
+(( ${+_comps} )) && _comps[zinit]=_zinit
+
+# ── Plugins (order matters) — skip in non-TTY contexts (e.g. topgrade) ───────
+if [[ -t 0 ]]; then
+
+# Syntax highlighting FIRST (must be before other plugins that set widgets)
+zinit light zdharma-continuum/fast-syntax-highlighting
+
+# Fish-like ghost-text autosuggestions
+zinit light zsh-users/zsh-autosuggestions
+
+# fzf-powered tab completion menu (closest to fish's tab UI)
+zinit light Aloxaf/fzf-tab
+
+# Extra community completions
+zinit light zsh-users/zsh-completions
+
+# Fish-like history substring search (up/down arrows)
+zinit light zsh-users/zsh-history-substring-search
+
+# Fish-like abbreviations that expand on space
+zinit light olets/zsh-abbr
+
+# Auto-close/delete brackets, quotes (fish autopair equivalent)
+zinit light hlissner/zsh-autopair
+
+# cd to frecent dirs (like fish's cdh). zoxide provides `z`/`zi`.
+# zinit light agkozak/zsh-z
+
+# fzf-powered interactive git UI (stage hunks, log browser, diff picker, stash)
+zinit light wfxr/forgit
+
+# reminds you to use alias when you type the full command
+zinit light MichaelAquilina/zsh-you-should-use
+
+# updates terminal tab/window title on cd and command run
+zinit light jreese/zsh-titles
+
+# desktop notification when long command finishes
+zinit light marzocchi/zsh-notify
+
+# jump back to named parent dir: inside ~/a/b/c/d, `bd b` → ~/a/b
+zinit light Tarrasch/zsh-bd
+
+# separate history per directory (toggle with ^G)
+zinit light jimhester/per-directory-history
+
+fi # [[ -t 0 ]]
+
+# ── Completion system ────────────────────────────────────────────────────────
+autoload -Uz compinit
+# Only rebuild cache once per day
+if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
+    compinit -u
+else
+    compinit -uC
+fi
+
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*:warnings' format '%F{red}no matches%f'
+zstyle ':completion:*:git-checkout:*' sort false
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*' squeeze-slashes true
+zstyle ':completion::complete:*' use-cache on
+zstyle ':completion::complete:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/compcache"
+
+# fzf-tab: use fzf for all tab completions
+zstyle ':fzf-tab:complete:cd:*'         fzf-preview 'eza --color=always --icons $realpath 2>/dev/null || ls --color=always $realpath'
+zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'eza --color=always --icons $realpath 2>/dev/null'
+zstyle ':fzf-tab:complete:kill:*'       fzf-preview 'ps --pid=$word -o cmd --no-header -w -w'
+zstyle ':fzf-tab:complete:(-command-|-parameter-|-brace-parameter-|export|unset|expand):*' \
+    fzf-preview 'echo ${(P)word}'
+zstyle ':fzf-tab:*' switch-group '<' '>'
+zstyle ':fzf-tab:*' fzf-flags --height=50% --layout=reverse
+zstyle ':fzf-tab:*' continuous-trigger '/'   # keep completing path segments
+
+# ── History ───────────────────────────────────────────────────────────────────
+HISTFILE="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/history"
+mkdir -p "$(dirname "$HISTFILE")"
+HISTSIZE=100000
+SAVEHIST=100000
+
+setopt SHARE_HISTORY          # sync across sessions (like fish)
+setopt HIST_IGNORE_DUPS       # no consecutive dupes
+setopt HIST_IGNORE_ALL_DUPS   # remove older dupe if same cmd entered
+setopt HIST_IGNORE_SPACE      # leading space = no history (privacy)
+setopt HIST_REDUCE_BLANKS
+setopt EXTENDED_HISTORY       # store timestamps
+setopt HIST_VERIFY            # expand history before executing
+
+# ── Atuin (superpowered history, replaces Ctrl-R) ────────────────────────────
+if [[ -t 0 ]] && command -v atuin &>/dev/null; then
+    eval "$(atuin init zsh --disable-up-arrow)"
+    # Ctrl-R → atuin interactive search
+    bindkey '^r' atuin-search
+fi
+
+# ── Directory behavior ────────────────────────────────────────────────────────
+setopt AUTO_CD                # type dir name alone = cd (like fish)
+setopt AUTO_PUSHD             # cd pushes to dir stack
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT
+setopt CDABLE_VARS            # cd to named directories
+
+# Zoxide (better z — frecency-based cd)
+if command -v zoxide &>/dev/null; then
+    eval "$(zoxide init zsh --no-cmd)"
+    function z() { __zoxide_z "$@" }
+    function zoi() { __zoxide_zi "$@" }
+    (( ${+functions[compdef]} )) && compdef __zoxide_z_complete z
+fi
+
+# ── Misc shell options ────────────────────────────────────────────────────────
+setopt CORRECT                # suggest corrections for commands
+setopt CORRECT_ALL            # suggest corrections for args too
+setopt INTERACTIVE_COMMENTS   # allow # comments in interactive shell
+setopt NO_BEEP                # no bell
+setopt COMBINING_CHARS        # handle unicode combining chars
+setopt RC_QUOTES              # '' = literal ' inside single-quoted strings
+setopt LONG_LIST_JOBS         # verbose job listings
+setopt NOTIFY                 # report bg job status immediately
+setopt MULTIOS                # multiple redirections
+setopt EXTENDED_GLOB          # #, ~, ^ in patterns
+setopt GLOB_DOTS              # dotfiles in globs without leading dot
+setopt NULL_GLOB              # no error if glob matches nothing
+unsetopt FLOW_CONTROL         # disable Ctrl-S/Ctrl-Q freeze
+
+# ── PATH (ported from fish config.fish) ──────────────────────────────────────
+typeset -U path PATH           # auto-deduplicate (fish does this natively)
+
+path=(
+    "$HOME/.local/bin"
+    "$HOME/.config/emacs/bin"
+    "$HOME/.cargo/bin"
+    "$HOME/.lmstudio/bin"
+    $path
+)
+
+export PATH
+
+# ── Environment variables (ported from fish) ─────────────────────────────────
+export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/openssh_agent"
+export EDITOR="nano"
+export VISUAL="nano"
+export PAGER="less"
+export LESS="-R -N --mouse"
+export LESSHISTFILE="/dev/null"
+export QT_QPA_PLATFORMTHEME="qt6ct"
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+# bat as manpager (colorized man pages)
+export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+export MANREDIR="bat"
+export BAT_THEME="Dracula"
+
+# fzf defaults — consistent with fzf.fish keybindings
+export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --exclude .git'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --exclude .git'
+export FZF_DEFAULT_OPTS="
+    --height 50%
+    --layout=reverse
+    --border rounded
+    --preview-window=right:55%:wrap
+    --color=fg:#cdd6f4,bg:#1e1e2e,hl:#89b4fa
+    --color=fg+:#cdd6f4,bg+:#313244,hl+:#89b4fa
+    --color=info:#cba6f7,prompt:#89dceb,pointer:#f38ba8
+    --color=marker:#a6e3a1,spinner:#f5c2e7,header:#6c7086
+    --bind 'ctrl-/:toggle-preview'
+    --bind 'ctrl-y:execute-silent(echo {+} | wl-copy)'
+    --bind 'ctrl-e:execute(\$EDITOR {+})'
+"
+export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :300 {}'"
+export FZF_ALT_C_OPTS="--preview 'eza --tree --color=always {} | head -80'"
+
+# Delta (better git diff)
+export GIT_PAGER="delta"
+
+# Ripgrep config
+export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
+
+# ── Keybindings — skip in non-TTY contexts ───────────────────────────────────
+if [[ -t 0 ]]; then
+
+bindkey -e   # emacs mode (Ctrl-A, Ctrl-E, Ctrl-W, Ctrl-U, Ctrl-K, etc.)
+
+# History substring search (up/down)
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+bindkey '^P'   history-substring-search-up
+bindkey '^N'   history-substring-search-down
+
+# Accept autosuggestion
+bindkey '^ '   autosuggest-accept       # Ctrl-Space (like fish Tab)
+bindkey '^f'   autosuggest-accept       # Ctrl-F (forward, vim-brain)
+bindkey '^]'   autosuggest-execute      # Ctrl-] accept+execute
+
+# Word movement (like fish)
+bindkey '^[[1;5C' forward-word          # Ctrl-Right
+bindkey '^[[1;5D' backward-word         # Ctrl-Left
+
+# Edit command in $EDITOR (like fish Alt-E)
+autoload -Uz edit-command-line
+zle -N edit-command-line
+bindkey '^xe' edit-command-line
+bindkey '^x^e' edit-command-line
+
+# Ctrl-Z: fg (toggle suspend/resume like fish)
+_ctrl_z() {
+    if [[ $#BUFFER -eq 0 ]]; then
+        BUFFER='fg'
+        zle accept-line
+    else
+        zle push-input
+        zle clear-screen
+    fi
+}
+zle -N _ctrl_z
+bindkey '^z' _ctrl_z
+
+# fzf keybindings (after plugin load) — try Fedora + NixOS paths
+for _fzf_kb in \
+    /usr/share/fzf/shell/key-bindings.zsh \
+    /run/current-system/sw/share/fzf/key-bindings.zsh \
+    "$HOME/.nix-profile/share/fzf/key-bindings.zsh"; do
+    [[ -f "$_fzf_kb" ]] && source "$_fzf_kb" && break
+done
+unset _fzf_kb
+
+fi # [[ -t 0 ]]
+
+# ── Autosuggestion settings ───────────────────────────────────────────────────
+# atuin strategy only works if atuin zsh init registered _zsh_autosuggest_strategy_atuin
+if (( $+functions[_zsh_autosuggest_strategy_atuin] )); then
+    ZSH_AUTOSUGGEST_STRATEGY=(atuin history completion)
+else
+    ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+fi
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#585b70'
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1   # faster with large histories
+
+# ── zsh-notify settings ──────────────────────────────────────────────────────
+zstyle ':notify:*' command-complete-timeout 10   # fire after 10s
+zstyle ':notify:*' notifier notify-send
+zstyle ':notify:*' success-title 'Done: #{cmd}'
+zstyle ':notify:*' error-title 'Failed: #{cmd}'
+zstyle ':notify:*' success-sound ''
+zstyle ':notify:*' error-sound ''
+zstyle ':notify:*' check-focus no                 # disable xdotool focus check (Wayland)
+
+# ── you-should-use settings ───────────────────────────────────────────────────
+export YSU_MESSAGE_POSITION="after"
+export YSU_MODE=ALL                              # check aliases + abbreviations
+
+# ── History substring search settings ────────────────────────────────────────
+HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND='bg=yellow,fg=black,bold'
+HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND='bg=red,fg=white,bold'
+HISTORY_SUBSTRING_SEARCH_FUZZY=1
+
+# ── Prompt: Starship ──────────────────────────────────────────────────────────
+if [[ -t 0 ]] && command -v starship &>/dev/null; then
+    eval "$(starship init zsh)"
+fi
+
+# ── Aliases — general ─────────────────────────────────────────────────────────
+# ls / eza
+alias ls='eza --color=auto --icons --group-directories-first'
+alias ll='eza -la --icons --git --group-directories-first'
+alias lt='eza --tree --icons --level=2'
+alias ltt='eza --tree --icons --level=3'
+alias la='eza -a --icons --group-directories-first'
+alias l='eza -1 --icons'
+
+# cat / bat
+alias cat='bat --paging=never'
+alias catp='bat'            # paged
+alias cata='bat -A'         # show non-printable
+
+# find / fd
+alias find='fd'
+
+# grep / ripgrep
+alias grep='rg'
+
+# ps / procs
+if command -v procs &>/dev/null; then
+    alias ps='procs'
+fi
+
+# df / duf
+if command -v duf &>/dev/null; then
+    alias df='duf'
+fi
+
+# top / btop (bottom removed 2026-06-10 consolidation)
+if command -v btop &>/dev/null; then
+    alias top='btop'
+    alias htop='btop'
+fi
+
+# Mail
+alias mail-aerc='aerc'
+
+# diff / delta
+if command -v delta &>/dev/null; then
+    alias diff='delta'
+fi
+
+# Markdown
+if command -v glow &>/dev/null; then
+    alias md='glow -p'
+fi
+
+# thefuck — check interpreter is valid before running
+if command -v thefuck &>/dev/null; then
+    _tf_bin=$(command -v thefuck)
+    _tf_interp=$(head -1 "$_tf_bin" 2>/dev/null | sed 's|#! *||' | awk '{print $1}')
+    [[ -x "$_tf_interp" ]] && eval "$(thefuck --alias)"
+    unset _tf_bin _tf_interp
+fi
+
+# Navigation
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias ~='cd ~'
+alias -- -='cd -'
+
+# Safety nets
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+alias mkdir='mkdir -pv'
+
+# Utils
+alias reload='exec zsh'
+alias zshrc='$EDITOR ~/.zshrc'
+alias path='echo -e ${PATH//:/\\n}'
+alias ports='ss -tulnp'
+alias myip='curl -s ifconfig.me'
+alias pubkey='cat ~/.ssh/*.pub'
+alias hist='history | fzf'
+
+# ── Aliases — ported from fish config.fish ────────────────────────────────────
+alias LMStudio='/home/username/AppImages/lm_studio.appimage'
+alias vicinae='/home/username/AppImages/vicinae.appimage'
+alias vivaldi-kwallet='vivaldi --password-store=kwallet6'
+alias streamdeck='~/.local/venvs/streamdeck-ui/bin/streamdeck'
+alias trixiepi='ssh username@<HOST-IP>'
+
+# ── Aliases — git ─────────────────────────────────────────────────────────────
+alias g='git'
+alias gs='git status -sb'
+alias ga='git add'
+alias gaa='git add -A'
+alias gc='git commit'
+alias gcm='git commit -m'
+alias gca='git commit --amend'
+alias gco='git checkout'
+alias gb='git branch'
+alias gbd='git branch -d'
+alias gd='git diff'
+alias gds='git diff --staged'
+alias gl='git log --oneline --graph --decorate --all'
+alias gll='git log --graph --pretty="%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ar) %C(bold blue)<%an>%Creset"'
+alias gp='git push'
+alias gpl='git pull'
+alias gpr='git pull --rebase'
+alias gf='git fetch --all --prune'
+alias gst='git stash'
+alias gstp='git stash pop'
+alias gstl='git stash list'
+alias gr='git rebase'
+alias gri='git rebase -i'
+alias grh='git reset HEAD'
+alias grhh='git reset HEAD --hard'
+alias gclean='git clean -fd'
+alias lg='lazygit'          # if installed
+
+# ── Aliases — systemd ────────────────────────────────────────────────────────
+alias sstart='sudo systemctl start'
+alias sstop='sudo systemctl stop'
+alias srestart='sudo systemctl restart'
+alias sstatus='sudo systemctl status'
+alias senable='sudo systemctl enable --now'
+alias sdisable='sudo systemctl disable --now'
+alias slogs='sudo journalctl -fu'
+alias ustart='systemctl --user start'
+alias ustop='systemctl --user stop'
+alias urestart='systemctl --user restart'
+alias ustatus='systemctl --user status'
+alias uenable='systemctl --user enable --now'
+alias ulogs='journalctl --user -fu'
+
+# ── Aliases — UPS ────────────────────────────────────────────────────────────
+alias ups='upsc cyberpower@localhost'
+alias upss='echo "Status:  $(upsc cyberpower@localhost ups.status)" && echo "Battery: $(upsc cyberpower@localhost battery.charge)%" && echo "Runtime: $(($(upsc cyberpower@localhost battery.runtime) / 60))min" && echo "Load:    $(upsc cyberpower@localhost ups.load)% ($(upsc cyberpower@localhost ups.realpower)W)"'
+
+# ── Aliases — dnf ────────────────────────────────────────────────────────────
+alias dnfi='sudo dnf install'
+alias dnfr='sudo dnf remove'
+alias dnfu='sudo dnf upgrade'
+alias dnfs='dnf search'
+alias dnfq='dnf info'
+alias dnfauto='sudo dnf autoremove'
+alias mux='emacsclient -nw -e "(mu4e)"'
+
+# ── Functions ─────────────────────────────────────────────────────────────────
+
+# ytplay — ported from fish (mpv + yt-dlp with youtube cookies)
+ytplay() {
+    mpv --ytdl-raw-options="cookies=/home/username/youtube-cookies.txt,extractor-args=youtube:player_client=web_embedded" \
+        "ytdl://ytsearch:$*"
+}
+
+# mkcd — make dir and cd into it
+mkcd() { mkdir -p "$1" && cd "$1"; }
+
+# extract — universal archive extractor
+extract() {
+    if [[ -f "$1" ]]; then
+        case "$1" in
+            *.tar.bz2) tar xjf "$1"   ;;
+            *.tar.gz)  tar xzf "$1"   ;;
+            *.tar.xz)  tar xJf "$1"   ;;
+            *.tar.zst) tar --zstd -xf "$1" ;;
+            *.bz2)     bunzip2 "$1"   ;;
+            *.gz)      gunzip "$1"    ;;
+            *.tar)     tar xf "$1"    ;;
+            *.tbz2)    tar xjf "$1"   ;;
+            *.tgz)     tar xzf "$1"   ;;
+            *.zip)     unzip "$1"     ;;
+            *.Z)       uncompress "$1";;
+            *.7z)      7z x "$1"      ;;
+            *.zst)     unzstd "$1"    ;;
+            *.rar)     unrar x "$1"   ;;
+            *)         echo "Unknown archive type: $1" ;;
+        esac
+    else
+        echo "'$1' is not a file"
+    fi
+}
+
+# fcd — fzf directory picker + cd
+fcd() {
+    local dir
+    dir=$(fd --type dir --hidden --exclude .git . "${1:-.}" | \
+          fzf --preview 'eza --tree --color=always {} | head -40') && cd "$dir"
+}
+
+# fopen — fzf file picker + $EDITOR
+fopen() {
+    local file
+    file=$(fd --type file --hidden --exclude .git . "${1:-.}" | \
+           fzf --preview 'bat --style=numbers --color=always --line-range :300 {}') && \
+    ${EDITOR:-nano} "$file"
+}
+
+# fkill — fzf process killer
+fkill() {
+    local pid
+    pid=$(procs 2>/dev/null || ps aux | fzf --header-lines=1 | awk '{print $2}') && kill -${1:-9} "$pid"
+}
+
+# gfb — fzf git branch switcher
+gfb() {
+    local branch
+    branch=$(git branch -a | grep -v HEAD | fzf --preview 'git log --oneline --graph --color=always $(echo {} | sed "s/.* //" | sed "s#remotes/[^/]*/##")' | \
+             sed 's/.* //' | sed 's#remotes/[^/]*/##') && git checkout "$branch"
+}
+
+# gfl — fzf git log navigator (show commit, can checkout)
+gfl() {
+    git log --oneline --graph --decorate --color=always | \
+    fzf --ansi --no-sort --preview 'echo {} | grep -o "[a-f0-9]\{7,\}" | head -1 | xargs git show --color=always' \
+        --bind 'enter:execute(echo {} | grep -o "[a-f0-9]\{7,\}" | head -1 | xargs git show | bat -l diff)'
+}
+
+# senv — fzf env var search
+senv() {
+    env | sort | fzf --preview 'echo {}'
+}
+
+# tldrfzf — browse tldr pages with fzf
+tldrfzf() {
+    tldr --list 2>/dev/null | fzf --preview 'tldr {}' --preview-window=right:70% | xargs tldr
+}
+
+# glow_fzf — browse markdown files with glow
+if command -v glow &>/dev/null; then
+    glowf() {
+        fd --type file -e md | fzf --preview 'glow {}' | xargs glow -p
+    }
+fi
+
+# bash_source — run bash scripts without rewriting them
+bash_source() { emulate -L bash; source "$1"; }
+
+# nnn with cd-on-quit (like fish's integration)
+if command -v nnn &>/dev/null; then
+    n() {
+        if [[ "${NNNLVL:-0}" -ge 1 ]]; then
+            echo "nnn is already running"
+            return
+        fi
+        export NNN_TMPFILE="${XDG_CONFIG_HOME:-$HOME/.config}/nnn/.lastd"
+        nnn -e "$@"
+        if [[ -f "$NNN_TMPFILE" ]]; then
+            source "$NNN_TMPFILE"
+            rm -f "$NNN_TMPFILE"
+        fi
+    }
+fi
+
+# ── Umask (ported from fish — needed for Emby share) ─────────────────────────
+umask 002
+
+# ── Named directories ─────────────────────────────────────────────────────────
+hash -d docs="$HOME/Documents"
+hash -d dl="$HOME/Downloads"
+hash -d cfg="$HOME/.config"
+hash -d media="/mnt/media"
+hash -d tank="/mnt/media/tank"
+hash -d tank2="/mnt/media/tank2"
+
+# ── Zsh abbreviations (fish abbr equivalent) ─────────────────────────────────
+# Expand on space, not enter — just like fish abbr
+# Add your own with: abbr add <name> <expansion>
+if [[ -t 0 ]]; then
+abbr -q gs='git status -sb'
+abbr -q ga='git add'
+abbr -q gaa='git add -A'
+abbr -q gcm='git commit -m'
+abbr -q gd='git diff'
+abbr -q gp='git push'
+abbr -q gpl='git pull'
+abbr -q lg='lazygit'
+abbr -q dnfi='sudo dnf install'
+abbr -q dnfu='sudo dnf upgrade'
+abbr -q vim='nvim'
+fi # [[ -t 0 ]]
+
+# ── Ripgrep config dir ────────────────────────────────────────────────────────
+mkdir -p "$HOME/.config/ripgrep"
+if [[ ! -f "$HOME/.config/ripgrep/config" ]]; then
+    cat > "$HOME/.config/ripgrep/config" << 'RGCONF'
+--smart-case
+--hidden
+--glob=!.git/*
+--glob=!node_modules/*
+--glob=!target/*
+--glob=!.cargo/*
+RGCONF
+fi
+
+# ── Completion cache dir ──────────────────────────────────────────────────────
+mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/compcache"
+
+# ── Local overrides ───────────────────────────────────────────────────────────
+# Machine-specific or secret env goes here (not tracked)
+if [[ -f "$HOME/.zshrc.local" ]]; then source "$HOME/.zshrc.local"; fi

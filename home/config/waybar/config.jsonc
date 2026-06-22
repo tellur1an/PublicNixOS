@@ -1,0 +1,180 @@
+{
+  "reload_style_on_change": true,
+  "layer": "top",
+  "position": "top",
+
+  // Bar height increased to 40px for tray icon visibility
+  "height": 40,
+  "spacing": 6,
+
+  "output": ["DP-2"],
+
+  "modules-left": [
+    "custom/launcher",
+    "sway/workspaces",
+    "mpris"
+  ],
+
+  "modules-center": [
+    "sway/window"
+  ],
+
+  "modules-right": [
+    "group/tray-drawer",
+    "network",
+    "custom/vpn",
+    "pulseaudio",
+    "memory",
+    "cpu",
+    "temperature",
+    "power-profiles-daemon",
+    "clock"
+  ],
+
+  "custom/launcher": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "Click to open application launcher (otter-launcher)",
+    "on-click": "otter-launcher"
+  },
+
+  // ==========================
+  // Sway workspaces (native IPC)
+  // ==========================
+  "sway/workspaces": {
+    "format": "{icon}",
+    "format-icons": {
+      "1:main":    "󱔼",
+      "2:chat":    "󰭹",
+      "3:browser": "󰈹",
+      "4:steam":   "󰓓",
+      "5:game":    "󰊖",
+      "6:media":   "",
+      "7:system":  "󰒓",
+      "8:mail":    "󰛮",
+      "9:util":    "",
+      "urgent":    "󰀩",
+      "default":   "󰉊"
+    },
+    "persistent-workspaces": {
+      "1:main":    ["DP-2"],
+      "2:chat":    ["DP-2"],
+      "3:browser": ["DP-2"],
+      "4:steam":   ["DP-2"],
+      "5:game":    ["DP-2"],
+      "6:media":   ["DP-2"],
+      "7:system":  ["DP-2"],
+      "8:mail":    ["DP-2"],
+      "9:util":    ["DP-2"]
+    },
+    "disable-scroll": false,
+    "all-outputs": false
+  },
+
+  // Active window title via native Sway IPC
+  "sway/window": {
+    "max-length": 60,
+    "tooltip": false
+  },
+
+  "mpris": {
+    "format": "{player_icon} {dynamic}",
+    "format-paused": "{status_icon} <i>{dynamic}</i>",
+    "format-stopped": "",
+    "dynamic-order": ["title", "artist"],
+    "player-icons": { "default": "󰐊" },
+    "status-icons": { "paused": "󰏤", "stopped": "󰓛" },
+    "max-length": 40
+  },
+
+  "group/tray-drawer": {
+    "orientation": "inherit",
+    "drawer": {
+      "transition-duration": 150,
+      "children-class": "tray-drawer-hidden",
+      "click-to-reveal": true,
+      "transition-left-to-right": true
+    },
+    "modules": ["custom/tray-toggle", "tray"]
+  },
+
+  "custom/tray-toggle": {
+    "format": "󰅴",
+    "tooltip": true,
+    "tooltip-format": "Click to show/hide system tray"
+  },
+
+  "tray": {
+    "icon-size": 18,
+    "spacing": 10,
+    "show-passive-items": true
+  },
+
+  "network": {
+    "format-icons": ["󰤮","󰤟","󰤢","󰤥","󰤨"],
+    "format": "{icon} {signalStrength}%",
+    "format-ethernet": "󰈀",
+    "format-disconnected": "󰪎",
+    "tooltip-format-wifi": "{essid} ({frequency} GHz)\n⇣{bandwidthDownBytes} ⇡{bandwidthUpBytes}",
+    "tooltip-format-ethernet": "⇣{bandwidthDownBytes} ⇡{bandwidthUpBytes}",
+    "tooltip-format-disconnected": "Disconnected",
+    "interval": 3,
+    "on-click": "nm-connection-editor",
+    "on-click-right": "~/.local/bin/vpn-pick"
+  },
+
+  // VPN status as JSON so CSS can dim OFF easily (class=on/off)
+  "custom/vpn": {
+    "exec": "bash -lc ~/.local/bin/waybar-vpn-json",
+    "return-type": "json",
+    "interval": 2,
+    "tooltip": true,
+    "tooltip-format": "WireGuard via NetworkManager\nLeft-click: open connections",
+    "on-click": "nm-connection-editor"
+  },
+
+  "pulseaudio": {
+    "format": "{icon} {volume}%",
+    "format-muted": "󰖁 muted",
+    "format-icons": {
+      "default": ["󰕿", "󰖀", "󰕾"]
+    },
+    "scroll-step": 5,
+    "on-click": "pamixer -t",
+    "on-click-right": "pwvucontrol"
+  },
+
+  "memory": {
+    "format": " {percentage}%",
+    "interval": 3
+  },
+
+  "cpu": {
+    "format": " {usage}%",
+    "interval": 3
+  },
+
+  "temperature": {
+    "format": "󰏈 {temperatureC}°C",
+    "critical-threshold": 80,
+    "hwmon-path": "/sys/class/hwmon/hwmon4/temp1_input",
+    "interval": 3
+  },
+
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip-format": "Power profile: {profile}\nDriver: {driver}",
+    "tooltip": true,
+    "format-icons": {
+      "default":     "󰄯",
+      "performance": "󰠠",
+      "balanced":    "󰄯",
+      "power-saver": "󱤅"
+    }
+  },
+
+  "clock": {
+    "format": "{:%H:%M}",
+    "tooltip": false
+  }
+}

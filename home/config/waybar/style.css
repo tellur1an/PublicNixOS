@@ -1,0 +1,239 @@
+/* Waybar style matching otter-bar aesthetic */
+/* Colors from otter-bar.conf */
+
+* {
+  border: none;
+  border-radius: 0;
+  font-family: "JetBrainsMono Nerd Font", "Noto Sans", sans-serif;
+  font-size: 15px;
+  min-height: 0;
+}
+
+window#waybar {
+  background-color: rgba(24, 24, 37, 0.4);  /* #18182566 from otter-bar */
+  color: #FFFFFF;
+}
+
+/* Left modules */
+#custom-launcher {
+  background-color: rgba(24, 24, 37, 0.4);
+  color: #7aa2f7;  /* Matching active tag color for prominence */
+  padding: 0 14px;
+  margin: 4px 2px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+#custom-launcher:hover {
+  background-color: rgba(122, 162, 247, 0.3);
+  color: #FFFFFF;
+}
+
+#mpris {
+  background-color: rgba(24, 24, 37, 0.4);
+  color: #FFFFFF;
+  padding: 0 12px;
+  margin: 4px 2px;
+}
+
+/* ==========================
+   Sway workspaces
+   ========================== */
+#workspaces {
+  margin: 0 4px;
+}
+
+#workspaces button {
+  background-color: rgba(24, 24, 37, 0.4);
+  color: #565f89;
+  padding: 0 8px;
+  margin: 4px 2px;
+  border-radius: 0;
+  border: none;
+  font-size: 17px;
+}
+
+#workspaces button.focused {
+  background-color: #D919BB;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+#workspaces button.urgent {
+  background-color: #F7768E;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+#workspaces button.visible {
+  background-color: rgba(217, 25, 187, 0.3);
+  color: #FFFFFF;
+}
+
+#workspaces button:hover {
+  background-color: rgba(217, 25, 187, 0.5);
+  color: #FFFFFF;
+}
+
+/* Center - active window (sway/window via native IPC) */
+#window {
+  background-color: rgba(24, 24, 37, 0.4);
+  color: #FFFFFF;
+  padding: 0 16px;
+  margin: 4px 2px;
+  font-weight: 500;
+}
+
+/* Right modules - styled to match otter-bar */
+#tray,
+#network,
+#custom-vpn,
+#pulseaudio,
+#memory,
+#cpu,
+#temperature,
+#power-profiles-daemon,
+#clock {
+  background-color: rgba(24, 24, 37, 0.4);
+  padding: 0 12px;
+  margin: 4px 2px;
+}
+
+/* Network - matching network colors from otter-bar */
+#network {
+  color: #94e2d5;  /* network_color */
+}
+
+#network.disconnected {
+  color: #6c7086;
+}
+
+/* VPN */
+#custom-vpn {
+  color: #a6e3a1;
+}
+
+#custom-vpn.off {
+  color: #6c7086;
+  opacity: 0.6;
+}
+
+/* Audio */
+#pulseaudio {
+  color: #89dceb;
+}
+
+#pulseaudio.muted {
+  color: #6c7086;
+}
+
+/* Memory - matching memory colors from otter-bar */
+#memory {
+  color: #cba6f7;  /* memory_color */
+}
+
+#memory.warning {
+  color: #f9e2af;  /* memory_warning_color */
+}
+
+#memory.critical {
+  color: #f38ba8;  /* memory_critical_color */
+  font-weight: bold;
+}
+
+/* CPU - matching cpu_load colors from otter-bar */
+#cpu {
+  color: #89b4fa;  /* cpu_load_color */
+}
+
+#cpu.warning {
+  color: #f9e2af;
+}
+
+#cpu.critical {
+  color: #f38ba8;
+  font-weight: bold;
+}
+
+/* Temperature - matching cpu_temp colors from otter-bar */
+#temperature {
+  color: #a6e3a1;  /* cpu_temp_color */
+}
+
+#temperature.critical {
+  color: #f38ba8;  /* cpu_temp_critical_color */
+  font-weight: bold;
+}
+
+/* Power profiles - matching otter-bar icons */
+#power-profiles-daemon {
+  color: #f9e2af;
+}
+
+#power-profiles-daemon.performance {
+  color: #f38ba8;
+}
+
+#power-profiles-daemon.power-saver {
+  color: #a6e3a1;
+}
+
+/* Clock - matching clock colors from otter-bar */
+#clock {
+  color: #7dcfff;  /* clock_spacer_color */
+  font-weight: bold;
+}
+
+/* Tray */
+#tray {
+  padding: 5px 12px;
+  margin: 3px 4px;
+  background-color: rgba(24, 24, 37, 0.4);
+}
+
+#tray > .passive {
+  -gtk-icon-effect: none;
+}
+
+#tray > .needs-attention {
+  -gtk-icon-effect: highlight;
+  background-color: rgba(243, 139, 168, 0.3);
+}
+
+#tray menu {
+  background-color: rgba(30, 30, 46, 0.95);
+  color: #FFFFFF;
+  border: 1px solid #7aa2f7;
+  padding: 4px;
+}
+
+/* Tray drawer toggle */
+#custom-tray-toggle {
+  background-color: rgba(24, 24, 37, 0.4);
+  padding: 0 8px;
+  margin: 4px 2px;
+  color: #FFFFFF;
+}
+
+/* MPRIS */
+#mpris {
+  color: #FFFFFF;  /* mpris_text_color */
+  padding: 0 12px;
+}
+
+#mpris.paused {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Tooltip styling */
+tooltip {
+  background-color: rgba(30, 30, 46, 0.95);
+  border: 1px solid #7aa2f7;
+  border-radius: 4px;
+}
+
+tooltip label {
+  color: #FFFFFF;
+  padding: 4px;
+}
